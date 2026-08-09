@@ -112,11 +112,23 @@ def generate_n_bon(type_bon, client):
     prefix = "BE" if type_bon == "ENTREE" else "BS"
     df = fetch_mouvements(client)
     year = datetime.now().strftime("%Y")
-    count = (len(df[df["type_mouvement"] == type_bon]) + 1) if not df.empty else 1
+    count = (len(df[df["type_mouvement"] == type_bon]) + 1) if not df.empty and "type_mouvement" in df.columns else 1
     return f"{prefix}-{year}-{client[:3].upper()}-{count:04d}"
 
+def get_available_stock(client, article_name):
+    """Calcule le stock actuel disponible pour un article donné."""
+    df_mvt = fetch_mouvements(client)
+    if df_mvt.empty or "quantite" not in df_mvt.columns or "type_mouvement" not in df_mvt.columns:
+        return 0
+    df_art = df_mvt[df_mvt["article"] == article_name]
+    if df_art.empty:
+        return 0
+    entrees = df_art[df_art["type_mouvement"] == "ENTREE"]["quantite"].sum()
+    sorties = df_art[df_art["type_mouvement"] == "SORTIE"]["quantite"].sum()
+    return int(entrees - sorties)
+
 # ---------------------------------------------------------
-# LOGIN PAGE (SECURISÉE CONTRE KEYERROR)
+# LOGIN PAGE
 # ---------------------------------------------------------
 if not st.session_state.user:
     st.title("🔐 NOMATIS - Connexion Gestion de Stock")
@@ -128,7 +140,6 @@ if not st.session_state.user:
             submit = st.form_submit_button("Se connecter", use_container_width=True)
             if submit:
                 df_u = fetch_users()
-                # Vérification sécurisée si les colonnes existent
                 if not df_u.empty and "username" in df_u.columns and "password" in df_u.columns:
                     match = df_u[(df_u["username"] == username) & (df_u["password"] == password)]
                     if not match.empty:
@@ -138,7 +149,6 @@ if not st.session_state.user:
                     else:
                         st.error("Identifiants incorrects.")
                 else:
-                    # Connexion de secours par défaut si la BDD est vide ou mal configurée
                     if username == "admin" and password == "admin123":
                         st.session_state.user = "admin"
                         st.session_state.role = "ADMIN"
@@ -502,6 +512,17 @@ with tabs[1]:
         receptionne_par_bs = st.text_input("Réceptionné par (Nom du récepteur)", key="rec_bs")
         stock_bs = st.text_input("Stock", value=st.session_state.selected_client, disabled=True, key="s_bs")
 
+    # Aperçu rapide des stocks disponibles
+    with st.expander("ℹ️ Cliquer pour voir les stocks actuellement disponibles", expanded=False):
+        df_mvt_check = fetch_mouvements(st.session_state.selected_client)
+        if not df_mvt_check.empty and "quantite" in df_mvt_check.columns:
+            df_mvt_check['q_signe'] = df_mvt_check.apply(lambda r: r['quantite'] if r['type_mouvement'] == 'ENTREE' else -r['quantite'], axis=1)
+            stk_disp_df = df_mvt_check.groupby('article')['q_signe'].sum().reset_index()
+            stk_disp_df.columns = ["Désignation", "Stock Disponible"]
+            st.dataframe(stk_disp_df, use_container_width=True)
+        else:
+            st.info("Aucun article en stock actuellement.")
+
     st.markdown("#### 📦 Articles à sortir :")
     df_bs_input = st.data_editor(
         pd.DataFrame([{"Désignation": list_articles[0], "Quantité": 1}]),
@@ -530,22 +551,40 @@ with tabs[1]:
         if not n_bl_bs or not destination_bs or not receptionne_par_bs or df_bs_input.empty:
             st.error("Veuillez remplir le N° Order, le Lieu de livraison et le Récepteur.")
         else:
-            for _, row in df_bs_input.iterrows():
-                supabase.table("mouvements").insert({
-                    "client": st.session_state.selected_client,
-                    "type_mouvement": "SORTIE",
-                    "n_bon": n_bon_bs,
-                    "date_creation": str(date_bs),
-                    "date_bl": str(date_bs),
-                    "n_bl": n_bl_bs,
-                    "equipe_recuperation": equipe_bs,
-                    "destination": destination_bs,
-                    "article": row["Désignation"],
-                    "quantite": int(row["Quantité"]),
-                    "utilisateur": st.session_state.user
-                }).execute()
-            st.session_state["bs_saved"] = True
-            st.success(f"Bon de Sortie {n_bon_bs} enregistré en base de données avec succès !")
+            # 🔍 VÉRIFICATION DU STOCK DISPONIBLE
+            stock_errors = []
+            
+            # Regrouper les quantités saisies au cas où le même article est ajouté plusieurs fois
+            df_grouped = df_bs_input.groupby("Désignation")["Quantité"].sum().reset_index()
+            
+            for _, row in df_grouped.iterrows():
+                article_nom = row["Désignation"]
+                qte_demandee = int(row["Quantité"])
+                qte_dispo = get_available_stock(st.session_state.selected_client, article_nom)
+                
+                if qte_demandee > qte_dispo:
+                    stock_errors.append(f"⛔ **{article_nom}** : Quantité demandée ({qte_demandee}) dépasse le stock disponible ({qte_dispo}).")
+
+            if stock_errors:
+                for err in stock_errors:
+                    st.error(err)
+            else:
+                for _, row in df_bs_input.iterrows():
+                    supabase.table("mouvements").insert({
+                        "client": st.session_state.selected_client,
+                        "type_mouvement": "SORTIE",
+                        "n_bon": n_bon_bs,
+                        "date_creation": str(date_bs),
+                        "date_bl": str(date_bs),
+                        "n_bl": n_bl_bs,
+                        "equipe_recuperation": equipe_bs,
+                        "destination": destination_bs,
+                        "article": row["Désignation"],
+                        "quantite": int(row["Quantité"]),
+                        "utilisateur": st.session_state.user
+                    }).execute()
+                st.session_state["bs_saved"] = True
+                st.success(f"Bon de Sortie {n_bon_bs} enregistré en base de données avec succès !")
 
     with c_bs_btn2:
         if st.session_state.get("bs_saved", False):
@@ -592,7 +631,7 @@ with tabs[1]:
 with tabs[2]:
     st.subheader(f"📊 État du Stock - Client {st.session_state.selected_client}")
     df_mvt = fetch_mouvements(st.session_state.selected_client)
-    if not df_mvt.empty:
+    if not df_mvt.empty and "quantite" in df_mvt.columns and "type_mouvement" in df_mvt.columns:
         df_mvt['q_signe'] = df_mvt.apply(lambda r: r['quantite'] if r['type_mouvement'] == 'ENTREE' else -r['quantite'], axis=1)
         stock_summary = df_mvt.groupby('article').agg(
             Entrees=('quantite', lambda x: x[df_mvt.loc[x.index, 'type_mouvement'] == 'ENTREE'].sum()),
@@ -618,13 +657,13 @@ with tabs[3]:
 with tabs[4]:
     st.subheader("✏️ Modifier un Bon")
     df_mod = fetch_mouvements(st.session_state.selected_client)
-    if not df_mod.empty:
+    if not df_mod.empty and "n_bon" in df_mod.columns:
         bon_id_mod = st.selectbox("Choisir le Bon à modifier :", df_mod["n_bon"].unique())
         item_mod = df_mod[df_mod["n_bon"] == bon_id_mod].iloc[0]
         
         with st.form("form_edit"):
-            e_nbl = st.text_input("N° BL / Order", value=str(item_mod["n_bl"]))
-            e_qty = st.number_input("Quantité", value=int(item_mod["quantite"]), min_value=1)
+            e_nbl = st.text_input("N° BL / Order", value=str(item_mod.get("n_bl", "")))
+            e_qty = st.number_input("Quantité", value=int(item_mod.get("quantite", 1)), min_value=1)
             if st.form_submit_button("Sauvegarder"):
                 supabase.table("mouvements").update({"n_bl": e_nbl, "quantite": e_qty}).eq("id", int(item_mod["id"])).execute()
                 st.success("Bon mis à jour !")
@@ -662,13 +701,17 @@ if st.session_state.role == "ADMIN":
             st.divider()
             st.markdown("#### Articles Existants :")
             df_cur_arts = fetch_articles(st.session_state.selected_client)
-            if not df_cur_arts.empty and "designation" in df_cur_arts.columns:
+            if not df_cur_arts.empty and "reference" in df_cur_arts.columns and "designation" in df_cur_arts.columns:
                 st.dataframe(df_cur_arts[["reference", "designation"]], use_container_width=True)
                 art_to_del = st.selectbox("Supprimer un article :", df_cur_arts["designation"].tolist())
                 if st.button("❌ Supprimer Article"):
                     supabase.table("articles").delete().eq("designation", art_to_del).eq("client", st.session_state.selected_client).execute()
                     st.success("Article supprimé !")
                     st.rerun()
+            elif not df_cur_arts.empty:
+                st.dataframe(df_cur_arts, use_container_width=True)
+            else:
+                st.info("Aucun article configuré pour ce client.")
 
         with sub_tab2:
             st.subheader("Ajouter un Fournisseur")
@@ -688,6 +731,8 @@ if st.session_state.role == "ADMIN":
                     supabase.table("fournisseurs").delete().eq("nom", f_to_del).execute()
                     st.success("Fournisseur supprimé !")
                     st.rerun()
+            elif not df_f.empty:
+                st.dataframe(df_f, use_container_width=True)
 
         with sub_tab3:
             st.subheader("Gestion des Utilisateurs")
@@ -707,7 +752,7 @@ if st.session_state.role == "ADMIN":
 
             st.divider()
             df_users_list = fetch_users()
-            if not df_users_list.empty and "username" in df_users_list.columns:
+            if not df_users_list.empty and "username" in df_users_list.columns and "role" in df_users_list.columns:
                 st.dataframe(df_users_list[["username", "role"]], use_container_width=True)
                 u_to_del = st.selectbox("Supprimer un utilisateur :", df_users_list["username"].tolist())
                 if st.button("❌ Supprimer Utilisateur"):
@@ -717,3 +762,5 @@ if st.session_state.role == "ADMIN":
                         st.rerun()
                     else:
                         st.error("Impossible de supprimer le compte Admin principal.")
+            elif not df_users_list.empty:
+                st.dataframe(df_users_list, use_container_width=True)
