@@ -6,14 +6,15 @@ import base64
 from st_supabase_connection import SupabaseConnection, execute_query
 
 # ---------------------------------------------------------
-# CONFIGURATION DE LA PAGE & STYLES CSS
+# CONFIGURATION DE LA PAGE & CSS
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Gestion de Stock Multi-Clients - Orange/Inwi/ZTE",
+    page_title="Gestion de Stock Multi-Clients",
     page_icon="📦",
     layout="wide"
 )
 
+# Masquer la barre de navigation et le footer Streamlit / GitHub
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -45,31 +46,32 @@ st.markdown("""
 # CONNEXION SUPABASE
 # ---------------------------------------------------------
 @st.cache_resource
-def init_connection():
+def get_supabase_client():
     return st.connection("supabase", type=SupabaseConnection)
 
 try:
-    supabase = init_connection()
-except Exception:
-    st.error("Erreur de connexion à Supabase. Vérifiez les secrets.")
+    conn = get_supabase_client()
+except Exception as e:
+    st.error("Erreur de connexion à Supabase. Vérifiez la configuration des secrets.")
 
+# Logos hébergés fiables
 CLIENTS = {
     "Orange": {
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Orange_logo.svg/512px-Orange_logo.svg.png",
         "color": "#FF6600"
     },
     "Inwi": {
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Inwi_Logo.svg",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Inwi_Logo.svg/512px-Inwi_Logo.svg.png",
         "color": "#A1006B"
     },
     "ZTE": {
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/d/df/ZTE_logo.svg",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/ZTE_logo.svg/512px-ZTE_logo.svg.png",
         "color": "#005BAC"
     }
 }
 
 # ---------------------------------------------------------
-# SESSION & AUTHENTIFICATION
+# SESSIONS ET AUTHENTIFICATION
 # ---------------------------------------------------------
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -101,7 +103,7 @@ if not st.session_state.user:
     st.stop()
 
 # ---------------------------------------------------------
-# SÉLECTION DU CLIENT
+# SÉLECTION CLIENT
 # ---------------------------------------------------------
 if not st.session_state.selected_client:
     st.title(f"👋 Bienvenue, {st.session_state.user} ({st.session_state.role})")
@@ -112,7 +114,7 @@ if not st.session_state.selected_client:
         with cols[idx]:
             st.markdown(f"""
                 <div class="client-card">
-                    <img src="{info['logo']}" height="70" style="object-fit: contain; margin-bottom: 10px;">
+                    <img src="{info['logo']}" height="80" style="object-fit: contain; margin-bottom: 15px;">
                     <h3 style="color: {info['color']};">{client_name}</h3>
                 </div>
             """, unsafe_allow_html=True)
@@ -123,13 +125,13 @@ if not st.session_state.selected_client:
     st.stop()
 
 # ---------------------------------------------------------
-# BANNIÈRE SUPÉRIEURE
+# HEADER CLIENT
 # ---------------------------------------------------------
 client_info = CLIENTS[st.session_state.selected_client]
 c_logo, c_title, c_user = st.columns([1, 4, 2])
 
 with c_logo:
-    st.image(client_info['logo'], width=90)
+    st.image(client_info['logo'], width=80)
 with c_title:
     st.title(f"Stock - {st.session_state.selected_client}")
 with c_user:
@@ -148,25 +150,25 @@ with c_user:
 st.divider()
 
 # ---------------------------------------------------------
-# FONCTIONS UTILITAIRES
+# FONCTIONS BDD
 # ---------------------------------------------------------
 def fetch_mouvements(client):
     try:
-        res = execute_query(supabase.table("mouvements").select("*").eq("client", client).order("created_at", desc=True))
+        res = execute_query(conn.table("mouvements").select("*").eq("client", client).order("created_at", desc=True))
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 def fetch_articles(client):
     try:
-        res = execute_query(supabase.table("articles").select("*").eq("client", client))
+        res = execute_query(conn.table("articles").select("*").eq("client", client))
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 def fetch_fournisseurs():
     try:
-        res = execute_query(supabase.table("fournisseurs").select("*"))
+        res = execute_query(conn.table("fournisseurs").select("*"))
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
@@ -185,7 +187,7 @@ def to_excel(df):
     return output.getvalue()
 
 # ---------------------------------------------------------
-# NAVIGATION
+# ONGLETS DE NAVIGATION
 # ---------------------------------------------------------
 tabs = [
     "📥 Bon d'Entrée (BE)", 
@@ -199,7 +201,6 @@ if st.session_state.role == "ADMIN":
 
 active_tabs = st.tabs(tabs)
 
-# Charger référentiels
 df_arts = fetch_articles(st.session_state.selected_client)
 list_articles = df_arts["designation"].tolist() if not df_arts.empty else []
 
@@ -221,7 +222,7 @@ with active_tabs[0]:
             st.text_input("N° BON", value=n_bon_be, disabled=True)
             date_creation = st.date_input("Date Création", value=today_date, disabled=True)
         with c2:
-            date_bl = st.date_input("Date BL (Ne doit pas dépasser aujourd'hui)", value=today_date, max_value=today_date)
+            date_bl = st.date_input("Date BL (Max aujourd'hui)", value=today_date, max_value=today_date)
             n_bl = st.text_input("N° BL (Bon de Livraison)")
         with c3:
             fournisseur = st.selectbox("Fournisseur", options=["-- Sélectionner --"] + list_fournisseurs)
@@ -255,7 +256,7 @@ with active_tabs[0]:
                     "utilisateur": st.session_state.user,
                     "image_data": img_b64
                 }
-                supabase.table("mouvements").insert(record).execute()
+                conn.table("mouvements").insert(record).execute()
                 st.success(f"Bon d'Entrée {n_bon_be} validé avec succès !")
                 st.rerun()
 
@@ -272,7 +273,7 @@ with active_tabs[1]:
             st.text_input("N° BON", value=n_bon_bs, disabled=True)
             date_creation_bs = st.date_input("Date Création", value=today_date, disabled=True, key="dc_bs")
         with c2:
-            date_bl_bs = st.date_input("Date BS/Demande (Ne doit pas dépasser aujourd'hui)", value=today_date, max_value=today_date, key="dbl_bs")
+            date_bl_bs = st.date_input("Date BS/Demande (Max aujourd'hui)", value=today_date, max_value=today_date, key="dbl_bs")
             n_bl_bs = st.text_input("N° Order / Demande", key="nbl_bs")
         with c3:
             equipe_recup = st.text_input("Équipe Destinataire / Récupérateur", key="eq_bs")
@@ -306,7 +307,7 @@ with active_tabs[1]:
                     "utilisateur": st.session_state.user,
                     "image_data": img_b64_bs
                 }
-                supabase.table("mouvements").insert(record).execute()
+                conn.table("mouvements").insert(record).execute()
                 st.success(f"Bon de Sortie {n_bon_bs} validé avec succès !")
                 st.rerun()
 
@@ -400,7 +401,7 @@ with active_tabs[4]:
                 btn_delete = st.form_submit_button("🗑️ Supprimer ce Bon", use_container_width=True)
                 
             if btn_update:
-                supabase.table("mouvements").update({
+                conn.table("mouvements").update({
                     "n_bl": e_nbl,
                     "quantite": int(e_qty),
                     "observation": e_obs
@@ -409,7 +410,7 @@ with active_tabs[4]:
                 st.rerun()
                 
             if btn_delete:
-                supabase.table("mouvements").delete().eq("id", int(row_mod["id"])).execute()
+                conn.table("mouvements").delete().eq("id", int(row_mod["id"])).execute()
                 st.warning("Bon supprimé avec succès !")
                 st.rerun()
 
@@ -424,33 +425,58 @@ if st.session_state.role == "ADMIN" and len(active_tabs) > 5:
         
         with tab_adm1:
             st.write(f"**Articles enregistrés pour {st.session_state.selected_client} :**")
-            st.dataframe(df_arts[["designation", "description"]], use_container_width=True) if not df_arts.empty else st.write("Aucun article.")
+            if not df_arts.empty:
+                st.dataframe(df_arts[["designation", "description"]], use_container_width=True)
+                
+                # Option de suppression d'article
+                art_to_del = st.selectbox("Supprimer un article :", options=["-- Choisir --"] + df_arts["designation"].tolist(), key="del_art_sel")
+                if st.button("🗑️ Supprimer l'article sélectionné") and art_to_del != "-- Choisir --":
+                    conn.table("articles").delete().eq("client", st.session_state.selected_client).eq("designation", art_to_del).execute()
+                    st.success("Article supprimé !")
+                    st.rerun()
+            else:
+                st.write("Aucun article disponible pour le moment.")
             
-            st.markdown("#### Ajouter un article")
+            st.divider()
+            st.markdown("#### Ajouter un nouvel article")
             new_art_des = st.text_input("Désignation de l'article")
             new_art_desc = st.text_input("Description / Code")
             if st.button("Ajouter l'article"):
                 if new_art_des:
-                    supabase.table("articles").insert({
+                    conn.table("articles").insert({
                         "client": st.session_state.selected_client,
                         "designation": new_art_des,
                         "description": new_art_desc
                     }).execute()
-                    st.success("Article ajouté !")
+                    st.success("Article ajouté avec succès !")
                     st.rerun()
+                else:
+                    st.error("Veuillez renseigner au moins la désignation de l'article.")
         
         with tab_adm2:
             st.write("**Fournisseurs enregistrés :**")
-            st.dataframe(df_fourn[["nom", "contact"]], use_container_width=True) if not df_fourn.empty else st.write("Aucun fournisseur.")
+            if not df_fourn.empty:
+                st.dataframe(df_fourn[["nom", "contact"]], use_container_width=True)
+                
+                fourn_to_del = st.selectbox("Supprimer un fournisseur :", options=["-- Choisir --"] + df_fourn["nom"].tolist(), key="del_fourn_sel")
+                if st.button("🗑️ Supprimer le fournisseur sélectionné") and fourn_to_del != "-- Choisir --":
+                    conn.table("fournisseurs").delete().eq("nom", fourn_to_del).execute()
+                    st.success("Fournisseur supprimé !")
+                    st.rerun()
+            else:
+                st.write("Aucun fournisseur disponible.")
             
-            st.markdown("#### Ajouter un fournisseur")
+            st.divider()
+            st.markdown("#### Ajouter un nouveau fournisseur")
             new_f_nom = st.text_input("Nom du fournisseur")
             new_f_contact = st.text_input("Contact / Email")
             if st.button("Ajouter le fournisseur"):
                 if new_f_nom:
-                    supabase.table("fournisseurs").insert({
+                    conn.table("fournisseurs").insert({
                         "nom": new_f_nom,
                         "contact": new_f_contact
                     }).execute()
-                    st.success("Fournisseur ajouté !")
+                    st.success("Fournisseur ajouté avec succès !")
                     st.rerun()
+                else:
+                    st.error("Veuillez remplir le nom du fournisseur.")
