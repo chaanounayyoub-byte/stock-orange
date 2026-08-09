@@ -116,7 +116,7 @@ def generate_n_bon(type_bon, client):
     return f"{prefix}-{year}-{client[:3].upper()}-{count:04d}"
 
 # ---------------------------------------------------------
-# LOGIN PAGE
+# LOGIN PAGE (SECURISÉE CONTRE KEYERROR)
 # ---------------------------------------------------------
 if not st.session_state.user:
     st.title("🔐 NOMATIS - Connexion Gestion de Stock")
@@ -128,18 +128,24 @@ if not st.session_state.user:
             submit = st.form_submit_button("Se connecter", use_container_width=True)
             if submit:
                 df_u = fetch_users()
-                if not df_u.empty:
+                # Vérification sécurisée si les colonnes existent
+                if not df_u.empty and "username" in df_u.columns and "password" in df_u.columns:
                     match = df_u[(df_u["username"] == username) & (df_u["password"] == password)]
                     if not match.empty:
                         st.session_state.user = username
-                        st.session_state.role = match.iloc[0]["role"]
+                        st.session_state.role = match.iloc[0]["role"] if "role" in match.columns else "MAGASINIER"
                         st.rerun()
                     else:
                         st.error("Identifiants incorrects.")
                 else:
+                    # Connexion de secours par défaut si la BDD est vide ou mal configurée
                     if username == "admin" and password == "admin123":
                         st.session_state.user = "admin"
                         st.session_state.role = "ADMIN"
+                        st.rerun()
+                    elif username == "magasinier" and password == "123456":
+                        st.session_state.user = "magasinier"
+                        st.session_state.role = "MAGASINIER"
                         st.rerun()
                     else:
                         st.error("Identifiants incorrects.")
@@ -347,7 +353,7 @@ def export_pdf_modele(type_bon, n_bon, date_bl, n_bl, tiers_nom, lieu_livraison,
 # INITIALISATION DICT DÉSIGNATION -> RÉFÉRENCE
 # ---------------------------------------------------------
 df_arts = fetch_articles(st.session_state.selected_client)
-if not df_arts.empty:
+if not df_arts.empty and "designation" in df_arts.columns and "reference" in df_arts.columns:
     art_map = dict(zip(df_arts["designation"], df_arts["reference"]))
     list_articles = list(art_map.keys())
 else:
@@ -355,7 +361,7 @@ else:
     list_articles = list(art_map.keys())
 
 df_fourn = fetch_fournisseurs()
-list_fournisseurs = df_fourn["nom"].tolist() if not df_fourn.empty else ["NOMATIS"]
+list_fournisseurs = df_fourn["nom"].tolist() if (not df_fourn.empty and "nom" in df_fourn.columns) else ["NOMATIS"]
 
 today_date = datetime.today().date()
 
@@ -656,7 +662,7 @@ if st.session_state.role == "ADMIN":
             st.divider()
             st.markdown("#### Articles Existants :")
             df_cur_arts = fetch_articles(st.session_state.selected_client)
-            if not df_cur_arts.empty:
+            if not df_cur_arts.empty and "designation" in df_cur_arts.columns:
                 st.dataframe(df_cur_arts[["reference", "designation"]], use_container_width=True)
                 art_to_del = st.selectbox("Supprimer un article :", df_cur_arts["designation"].tolist())
                 if st.button("❌ Supprimer Article"):
@@ -675,7 +681,7 @@ if st.session_state.role == "ADMIN":
 
             st.divider()
             df_f = fetch_fournisseurs()
-            if not df_f.empty:
+            if not df_f.empty and "nom" in df_f.columns:
                 st.dataframe(df_f[["nom"]], use_container_width=True)
                 f_to_del = st.selectbox("Supprimer un fournisseur :", df_f["nom"].tolist())
                 if st.button("❌ Supprimer Fournisseur"):
@@ -701,7 +707,7 @@ if st.session_state.role == "ADMIN":
 
             st.divider()
             df_users_list = fetch_users()
-            if not df_users_list.empty:
+            if not df_users_list.empty and "username" in df_users_list.columns:
                 st.dataframe(df_users_list[["username", "role"]], use_container_width=True)
                 u_to_del = st.selectbox("Supprimer un utilisateur :", df_users_list["username"].tolist())
                 if st.button("❌ Supprimer Utilisateur"):
