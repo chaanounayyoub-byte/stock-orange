@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import io
 import base64
-from st_supabase_connection import SupabaseConnection, execute_query
+from st_supabase_connection import SupabaseConnection
 
 # ---------------------------------------------------------
 # CONFIGURATION DE LA PAGE & CSS
@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Masquer la barre de navigation et le footer Streamlit / GitHub
+# Masquer la barre de navigation Streamlit
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -27,13 +27,7 @@ st.markdown("""
         padding: 20px;
         text-align: center;
         background-color: #ffffff;
-        transition: transform 0.2s, border-color 0.2s;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    .client-card:hover {
-        transform: translateY(-5px);
-        border-color: #ff6600;
-        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
     }
     .stButton > button {
         border-radius: 8px;
@@ -46,27 +40,32 @@ st.markdown("""
 # CONNEXION SUPABASE
 # ---------------------------------------------------------
 @st.cache_resource
-def get_supabase_client():
+def get_supabase_conn():
     return st.connection("supabase", type=SupabaseConnection)
 
 try:
-    conn = get_supabase_client()
+    conn = get_supabase_conn()
+    supabase = conn.client  # Client Supabase natif pour faire table().insert(), etc.
 except Exception as e:
     st.error("Erreur de connexion à Supabase. Vérifiez la configuration des secrets.")
 
-# Logos hébergés fiables
+# Logos Data-URI SVG intégrés (100% fiables, pas d'erreurs d'affichage)
 CLIENTS = {
     "Orange": {
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Orange_logo.svg/512px-Orange_logo.svg.png",
+        "logo": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='10' fill='%23FF6600'/><text x='50%' y='60%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial, sans-serif' font-weight='bold' font-size='18'>Orange</text></svg>",
         "color": "#FF6600"
     },
     "Inwi": {
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Inwi_Logo.svg/512px-Inwi_Logo.svg.png",
+        "logo": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='10' fill='%23A1006B'/><text x='50%' y='60%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial, sans-serif' font-weight='bold' font-size='22'>inwi</text></svg>",
         "color": "#A1006B"
     },
     "ZTE": {
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/ZTE_logo.svg/512px-ZTE_logo.svg.png",
+        "logo": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='10' fill='%23005BAC'/><text x='50%' y='60%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial, sans-serif' font-weight='bold' font-size='24'>ZTE</text></svg>",
         "color": "#005BAC"
+    },
+    "Nomatis": {
+        "logo": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='10' fill='%231E293B'/><text x='50%' y='60%' dominant-baseline='middle' text-anchor='middle' fill='%2338BDF8' font-family='Arial, sans-serif' font-weight='bold' font-size='16'>NOMATIS</text></svg>",
+        "color": "#1E293B"
     }
 }
 
@@ -109,7 +108,7 @@ if not st.session_state.selected_client:
     st.title(f"👋 Bienvenue, {st.session_state.user} ({st.session_state.role})")
     st.subheader("Choisissez le client :")
     
-    cols = st.columns(3)
+    cols = st.columns(4)
     for idx, (client_name, info) in enumerate(CLIENTS.items()):
         with cols[idx]:
             st.markdown(f"""
@@ -119,7 +118,7 @@ if not st.session_state.selected_client:
                 </div>
             """, unsafe_allow_html=True)
             st.write("")
-            if st.button(f"Accéder au Stock {client_name}", key=f"btn_{client_name}", use_container_width=True):
+            if st.button(f"Accéder à {client_name}", key=f"btn_{client_name}", use_container_width=True):
                 st.session_state.selected_client = client_name
                 st.rerun()
     st.stop()
@@ -154,21 +153,21 @@ st.divider()
 # ---------------------------------------------------------
 def fetch_mouvements(client):
     try:
-        res = execute_query(conn.table("mouvements").select("*").eq("client", client).order("created_at", desc=True))
+        res = supabase.table("mouvements").select("*").eq("client", client).order("created_at", desc=True).execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 def fetch_articles(client):
     try:
-        res = execute_query(conn.table("articles").select("*").eq("client", client))
+        res = supabase.table("articles").select("*").eq("client", client).execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
 def fetch_fournisseurs():
     try:
-        res = execute_query(conn.table("fournisseurs").select("*"))
+        res = supabase.table("fournisseurs").select("*").execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
@@ -256,7 +255,7 @@ with active_tabs[0]:
                     "utilisateur": st.session_state.user,
                     "image_data": img_b64
                 }
-                conn.table("mouvements").insert(record).execute()
+                supabase.table("mouvements").insert(record).execute()
                 st.success(f"Bon d'Entrée {n_bon_be} validé avec succès !")
                 st.rerun()
 
@@ -307,7 +306,7 @@ with active_tabs[1]:
                     "utilisateur": st.session_state.user,
                     "image_data": img_b64_bs
                 }
-                conn.table("mouvements").insert(record).execute()
+                supabase.table("mouvements").insert(record).execute()
                 st.success(f"Bon de Sortie {n_bon_bs} validé avec succès !")
                 st.rerun()
 
@@ -401,7 +400,7 @@ with active_tabs[4]:
                 btn_delete = st.form_submit_button("🗑️ Supprimer ce Bon", use_container_width=True)
                 
             if btn_update:
-                conn.table("mouvements").update({
+                supabase.table("mouvements").update({
                     "n_bl": e_nbl,
                     "quantite": int(e_qty),
                     "observation": e_obs
@@ -410,7 +409,7 @@ with active_tabs[4]:
                 st.rerun()
                 
             if btn_delete:
-                conn.table("mouvements").delete().eq("id", int(row_mod["id"])).execute()
+                supabase.table("mouvements").delete().eq("id", int(row_mod["id"])).execute()
                 st.warning("Bon supprimé avec succès !")
                 st.rerun()
 
@@ -428,10 +427,9 @@ if st.session_state.role == "ADMIN" and len(active_tabs) > 5:
             if not df_arts.empty:
                 st.dataframe(df_arts[["designation", "description"]], use_container_width=True)
                 
-                # Option de suppression d'article
                 art_to_del = st.selectbox("Supprimer un article :", options=["-- Choisir --"] + df_arts["designation"].tolist(), key="del_art_sel")
                 if st.button("🗑️ Supprimer l'article sélectionné") and art_to_del != "-- Choisir --":
-                    conn.table("articles").delete().eq("client", st.session_state.selected_client).eq("designation", art_to_del).execute()
+                    supabase.table("articles").delete().eq("client", st.session_state.selected_client).eq("designation", art_to_del).execute()
                     st.success("Article supprimé !")
                     st.rerun()
             else:
@@ -443,7 +441,7 @@ if st.session_state.role == "ADMIN" and len(active_tabs) > 5:
             new_art_desc = st.text_input("Description / Code")
             if st.button("Ajouter l'article"):
                 if new_art_des:
-                    conn.table("articles").insert({
+                    supabase.table("articles").insert({
                         "client": st.session_state.selected_client,
                         "designation": new_art_des,
                         "description": new_art_desc
@@ -460,7 +458,7 @@ if st.session_state.role == "ADMIN" and len(active_tabs) > 5:
                 
                 fourn_to_del = st.selectbox("Supprimer un fournisseur :", options=["-- Choisir --"] + df_fourn["nom"].tolist(), key="del_fourn_sel")
                 if st.button("🗑️ Supprimer le fournisseur sélectionné") and fourn_to_del != "-- Choisir --":
-                    conn.table("fournisseurs").delete().eq("nom", fourn_to_del).execute()
+                    supabase.table("fournisseurs").delete().eq("nom", fourn_to_del).execute()
                     st.success("Fournisseur supprimé !")
                     st.rerun()
             else:
@@ -472,7 +470,7 @@ if st.session_state.role == "ADMIN" and len(active_tabs) > 5:
             new_f_contact = st.text_input("Contact / Email")
             if st.button("Ajouter le fournisseur"):
                 if new_f_nom:
-                    conn.table("fournisseurs").insert({
+                    supabase.table("fournisseurs").insert({
                         "nom": new_f_nom,
                         "contact": new_f_contact
                     }).execute()
