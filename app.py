@@ -98,9 +98,9 @@ CLIENTS_INFO = {
 
 
 # ---------------------------------------------------------
-# FONCTION DE GÉNÉRATION HTML POUR BE (MODELE EXACT EXCEL)
+# FONCTION DE GÉNÉRATION HTML POUR BONS (EXCEL FORMAT)
 # ---------------------------------------------------------
-def generate_be_html(be_data, client_logo_path):
+def generate_be_html(be_data, client_logo_path, is_bs=False):
     nomatis_logo_b64 = ""
     if os.path.exists("Logo Nomatis.jpg"):
         with open("Logo Nomatis.jpg", "rb") as f:
@@ -120,6 +120,12 @@ def generate_be_html(be_data, client_logo_path):
             <td style="border: 2px solid black; padding: 8px; text-align: center;">{item.get('Quantité', 0)}</td>
         </tr>
         """
+
+    title_text = "Bon de sortie" if is_bs else "Bon d'entree"
+    col3_header = "Équipe" if is_bs else "Fournisseur"
+    col3_val = be_data.get("equipe", "") if is_bs else be_data.get("fournisseur", "")
+    col4_header = "Destination" if is_bs else "Lieu de livraison"
+    col4_val = be_data.get("destination", "") if is_bs else be_data.get("lieu_livraison", "")
 
     return f"""
     <!DOCTYPE html>
@@ -160,26 +166,26 @@ def generate_be_html(be_data, client_logo_path):
             </tr>
         </table>
 
-        <div class="title">Bon d'entree</div>
+        <div class="title">{title_text}</div>
 
         <table class="info-table">
             <thead>
                 <tr>
-                    <th>Bon de Livraison</th>
+                    <th>N° Bon</th>
                     <th>Date</th>
-                    <th>Fournisseur</th>
-                    <th>Lieu de livraison</th>
-                    <th>receptioné par</th>
+                    <th>{col3_header}</th>
+                    <th>{col4_header}</th>
+                    <th>Établi / Réceptionné par</th>
                     <th>Stock</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
                     <td>{be_data.get('id', '')}</td>
-                    <td>{be_data.get('date_be', '')}</td>
-                    <td>{be_data.get('fournisseur', '')}</td>
-                    <td>{be_data.get('lieu_livraison', '')}</td>
-                    <td>{be_data.get('receptionne_par', '')}</td>
+                    <td>{be_data.get('date_be', be_data.get('date_bs', ''))}</td>
+                    <td>{col3_val}</td>
+                    <td>{col4_val}</td>
+                    <td>{be_data.get('receptionne_par', st.session_state.users_db[st.session_state.current_user]['name'])}</td>
                     <td>{be_data.get('client', '')}</td>
                 </tr>
             </tbody>
@@ -233,15 +239,6 @@ if not st.session_state.logged_in:
             border-radius: 6px !important;
             padding: 10px !important;
         }
-        .btn-green button {
-            background-color: #2ec4b6 !important;
-            color: #ffffff !important;
-            border: none !important;
-            font-size: 16px !important;
-            font-weight: bold !important;
-            border-radius: 6px !important;
-            padding: 10px !important;
-        }
     </style>
     """,
         unsafe_allow_html=True,
@@ -271,7 +268,6 @@ if not st.session_state.logged_in:
                 "Mot de passe", type="password", key="pass_in"
             )
 
-            # Bouton dynamically styled (Rouge par défaut)
             st.markdown('<div class="btn-red">', unsafe_allow_html=True)
             login_clicked = st.button("SE CONNECTER", use_container_width=True)
             st.markdown("</div>", unsafe_allow_html=True)
@@ -288,7 +284,7 @@ if not st.session_state.logged_in:
                         "last_login"
                     ] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-                    # Changement visuel dynamique en vert
+                    # Bouton devient vert lors de la validation
                     st.markdown(
                         """
                     <style>
@@ -352,7 +348,6 @@ if not st.session_state.selected_client:
         unsafe_allow_html=True,
     )
 
-    # En-tête haut de page
     c_head1, c_head2 = st.columns([3, 1])
     with c_head1:
         st.title("Gestion Stock MW NOMATIS")
@@ -373,9 +368,9 @@ if not st.session_state.selected_client:
         with cols_clients[idx]:
             st.markdown('<div class="client-card">', unsafe_allow_html=True)
 
-            # Logo client uniforme
+            # Fixation de la taille d'image sans paramètre height invalide
             if os.path.exists(info["logo"]):
-                st.image(info["logo"], height=100)
+                st.image(info["logo"], width=120)
             else:
                 st.markdown(
                     f"<h2 style='height:100px; line-height:100px;'>{client_name}</h2>",
@@ -403,7 +398,7 @@ if not st.session_state.selected_client:
     st.divider()
 
     # ---------------------------------------------------------
-    # GESTION DES UTILISATEURS (SUR LA PAGE CLIENT)
+    # GESTION DES UTILISATEURS (PAGE CLIENT)
     # ---------------------------------------------------------
     if user_role == "admin":
         st.subheader("🛠️ Gestion des Utilisateurs (Administrateur)")
@@ -495,7 +490,6 @@ if not st.session_state.selected_client:
                     st.rerun()
 
     else:
-        # Modification de son propre compte pour autres rôles
         st.subheader("⚙️ Mon Compte Utilisateur")
         with st.form("form_self_edit"):
             self_name = st.text_input(
@@ -540,7 +534,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# En-tête Espace Client
 c_top1, c_top2, c_top3 = st.columns([2, 3, 2])
 with c_top1:
     if os.path.exists("Logo Nomatis.jpg"):
@@ -646,7 +639,6 @@ with t_be:
             if qte_i <= 0:
                 st.error("La quantité doit être supérieure à 0.")
             else:
-                # Vérification doublon d'article : faire la somme
                 found = False
                 for item in st.session_state.temp_be_items:
                     if item["Article"] == art_i:
@@ -686,7 +678,6 @@ with t_be:
                         "client": st.session_state.selected_client,
                     }
 
-                    # Mise à jour du stock
                     for it in st.session_state.temp_be_items:
                         st.session_state.stock_db[it["Article"]] = (
                             st.session_state.stock_db.get(it["Article"], 0)
@@ -814,7 +805,6 @@ with t_bs:
                             "client": st.session_state.selected_client,
                         }
 
-                        # Déduction du stock
                         for it in st.session_state.temp_bs_items:
                             st.session_state.stock_db[it["Article"]] -= it[
                                 "Quantité"
@@ -841,7 +831,6 @@ with t_stock:
 
     stock_summary = []
     for art in st.session_state.config["articles"]:
-        # Total Entrées via BE pour ce client
         tot_be = sum(
             it["Quantité"]
             for be in st.session_state.be_list
@@ -850,7 +839,6 @@ with t_stock:
             if it["Article"] == art
         )
 
-        # Total Sorties via BS pour ce client
         tot_bs = sum(
             it["Quantité"]
             for bs in st.session_state.bs_list
@@ -928,7 +916,6 @@ with t_mods:
             with col_be_act1:
                 if user_role in ["admin", "magasinier"]:
                     if st.button("❌ Supprimer ce BE", use_container_width=True):
-                        # Restituer/Ajuster le stock
                         for it in be_target["items"]:
                             st.session_state.stock_db[it["Article"]] -= it[
                                 "Quantité"
@@ -945,9 +932,9 @@ with t_mods:
                 logo_path = CLIENTS_INFO[st.session_state.selected_client][
                     "logo"
                 ]
-                html_data = generate_be_html(be_target, logo_path)
+                html_data = generate_be_html(be_target, logo_path, is_bs=False)
                 st.download_button(
-                    label="🖨️ Télécharger / Imprimer BE (Modèle Exact HTML/Word)",
+                    label="🖨️ Télécharger / Imprimer BE (Format HTML/Word)",
                     data=html_data,
                     file_name=f"{be_target['id']}.html",
                     mime="text/html",
@@ -1002,7 +989,6 @@ with t_mods:
             with col_bs_act1:
                 if user_role in ["admin", "magasinier"]:
                     if st.button("❌ Supprimer ce BS", use_container_width=True):
-                        # Réintégrer le stock
                         for it in bs_target["items"]:
                             st.session_state.stock_db[it["Article"]] += it[
                                 "Quantité"
@@ -1019,11 +1005,9 @@ with t_mods:
                 logo_path = CLIENTS_INFO[st.session_state.selected_client][
                     "logo"
                 ]
-                html_bs_data = generate_be_html(bs_target, logo_path).replace(
-                    "Bon d'entree", "Bon de sortie"
-                )
+                html_bs_data = generate_be_html(bs_target, logo_path, is_bs=True)
                 st.download_button(
-                    label="🖨️ Télécharger / Imprimer BS (Modèle Exact HTML/Word)",
+                    label="🖨️ Télécharger / Imprimer BS (Format HTML/Word)",
                     data=html_bs_data,
                     file_name=f"{bs_target['id']}.html",
                     mime="text/html",
@@ -1036,13 +1020,12 @@ with t_mods:
 # =========================================================
 with t_config:
     if user_role != "admin":
-        st.error("🔒 Cette rubrique est strictement réservée à l'administrateur.")
+        st.error("🔒 Cette rubrique est strictly réservée à l'administrateur.")
     else:
         st.subheader("⚙️ Configuration Référentiels & Stock")
 
         col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
 
-        # GESTION ARTICLES
         with col_cfg1:
             st.write("##### 📦 Articles")
             add_art = st.text_input("Nouvel article", key="cfg_add_art")
@@ -1068,7 +1051,6 @@ with t_config:
                 st.success("Article supprimé.")
                 st.rerun()
 
-        # GESTION FOURNISSEURS
         with col_cfg2:
             st.write("##### 🏢 Fournisseurs")
             add_four = st.text_input("Nouveau fournisseur", key="cfg_add_four")
@@ -1092,7 +1074,6 @@ with t_config:
                 st.success("Fournisseur supprimé.")
                 st.rerun()
 
-        # GESTION ÉQUIPES / RESSOURCES
         with col_cfg3:
             st.write("##### 👥 Équipes / Ressources")
             add_eq = st.text_input("Nouvelle équipe", key="cfg_add_eq")
@@ -1115,7 +1096,6 @@ with t_config:
 
         st.divider()
 
-        # AJUSTEMENT MANUEL DU STOCK
         st.subheader("🛠️ Ajustement Manuel du Stock")
         c_adj1, c_adj2 = st.columns(2)
         with c_adj1:
