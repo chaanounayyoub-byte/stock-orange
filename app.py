@@ -37,20 +37,20 @@ except Exception:
     st.error("Erreur de connexion à Supabase. Vérifiez vos identifiants.")
 
 # ---------------------------------------------------------
-# CLIENTS, THÈMES ET LOGOS
+# CLIENTS, THÈMES ET LOGOS (Liens PNG Directs Fiables)
 # ---------------------------------------------------------
 CLIENTS = {
     "Orange": {
         "color": "#FF6600",
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Orange_logo.svg/320px-Orange_logo.svg.png",
     },
     "Inwi": {
         "color": "#A1006B",
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/0/07/Inwi_logo.svg",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Inwi_logo.svg/320px-Inwi_logo.svg.png",
     },
     "ZTE": {
         "color": "#005BAC",
-        "logo": "https://upload.wikimedia.org/wikipedia/commons/0/03/ZTE_logo.svg",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/ZTE_logo.svg/320px-ZTE_logo.svg.png",
     },
 }
 
@@ -82,18 +82,6 @@ st.markdown(
         border-radius: 8px !important;
         border: none !important;
         font-weight: bold !important;
-    }}
-    .client-card {{
-        border: 2px solid #e0e0e0;
-        border-radius: 12px;
-        padding: 20px;
-        text-align: center;
-        background-color: #ffffff;
-        min-height: 180px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
     }}
     </style>
 """,
@@ -224,31 +212,34 @@ if not st.session_state.user:
     st.stop()
 
 # ---------------------------------------------------------
-# SÉLECTION CLIENT
+# SÉLECTION CLIENT (Affichage Amélioré avec Streamlit Native)
 # ---------------------------------------------------------
 if not st.session_state.selected_client:
     st.title(f"👋 Bienvenue, {st.session_state.user}")
     st.subheader("Sélectionnez l'espace Client :")
+    st.write("")
+
     cols = st.columns(3)
     for idx, (client_name, info) in enumerate(CLIENTS.items()):
         with cols[idx]:
-            st.markdown(
-                f"""
-                <div class="client-card">
-                    <img src="{info['logo']}" alt="{client_name}" style="height: 60px; object-fit: contain; margin-bottom: 12px;" onError="this.style.display='none'">
-                    <h2 style="color: {info['color']}; margin: 0;">{client_name}</h2>
-                </div>
-            """,
-                unsafe_allow_html=True,
-            )
-            st.write("")
-            if st.button(
-                f"Accéder au Stock {client_name}",
-                key=f"btn_{client_name}",
-                use_container_width=True,
-            ):
-                st.session_state.selected_client = client_name
-                st.rerun()
+            with st.container(border=True):
+                c_img1, c_img2, c_img3 = st.columns([1, 2, 1])
+                with c_img2:
+                    st.image(info["logo"], width=120)
+
+                st.markdown(
+                    f"<h2 style='text-align: center; color: {info['color']};"
+                    f" margin-top: 10px;'>{client_name}</h2>",
+                    unsafe_allow_html=True,
+                )
+                st.write("")
+                if st.button(
+                    f"Accéder au Stock {client_name}",
+                    key=f"btn_{client_name}",
+                    use_container_width=True,
+                ):
+                    st.session_state.selected_client = client_name
+                    st.rerun()
     st.stop()
 
 # ---------------------------------------------------------
