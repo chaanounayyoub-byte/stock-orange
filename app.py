@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="Gestion Stock MW NOMATIS",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ---------------------------------------------------------
@@ -24,7 +24,6 @@ if "current_user" not in st.session_state:
 if "selected_client" not in st.session_state:
     st.session_state.selected_client = None
 
-# Base de données utilisateurs par défaut
 if "users_db" not in st.session_state:
     st.session_state.users_db = {
         "admin": {
@@ -47,7 +46,6 @@ if "users_db" not in st.session_state:
         },
     }
 
-# Configuration globale des référentiels (Gestion Admin)
 if "config" not in st.session_state:
     st.session_state.config = {
         "articles": [
@@ -60,7 +58,6 @@ if "config" not in st.session_state:
         "equipes": ["Nabil Team", "Yassine Team", "Issam Team"],
     }
 
-# Stock par article (Initialisation)
 if "stock_db" not in st.session_state:
     st.session_state.stock_db = {
         "câble IF": 100,
@@ -69,7 +66,6 @@ if "stock_db" not in st.session_state:
         "support 0.6 m": 25,
     }
 
-# Suivi des ajustements manuels par l'admin
 if "manual_adjustments" not in st.session_state:
     st.session_state.manual_adjustments = {
         "câble IF": 0,
@@ -78,13 +74,11 @@ if "manual_adjustments" not in st.session_state:
         "support 0.6 m": 0,
     }
 
-# Registres des Bons (BE et BS)
 if "be_list" not in st.session_state:
     st.session_state.be_list = []
 if "bs_list" not in st.session_state:
     st.session_state.bs_list = []
 
-# Paniers temporaires de saisie multi-articles
 if "temp_be_items" not in st.session_state:
     st.session_state.temp_be_items = []
 if "temp_bs_items" not in st.session_state:
@@ -98,7 +92,7 @@ CLIENTS_INFO = {
 
 
 # ---------------------------------------------------------
-# FONCTION DE GÉNÉRATION HTML POUR BONS (EXCEL FORMAT)
+# GÉNÉRATION DU MODÈLE D'IMPRESSION HTML (EXCEL TYPE)
 # ---------------------------------------------------------
 def generate_be_html(be_data, client_logo_path, is_bs=False):
     nomatis_logo_b64 = ""
@@ -115,9 +109,9 @@ def generate_be_html(be_data, client_logo_path, is_bs=False):
     for item in be_data["items"]:
         items_rows += f"""
         <tr>
-            <td style="border: 2px solid black; padding: 8px;">{item.get('Référence', '-')}</td>
-            <td style="border: 2px solid black; padding: 8px; text-align: left;">{item.get('Article', '')}</td>
-            <td style="border: 2px solid black; padding: 8px; text-align: center;">{item.get('Quantité', 0)}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 10px;">{item.get('Référence', '-')}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: left;">{item.get('Article', '')}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-weight: bold;">{item.get('Quantité', 0)}</td>
         </tr>
         """
 
@@ -133,18 +127,17 @@ def generate_be_html(be_data, client_logo_path, is_bs=False):
     <head>
         <meta charset="utf-8">
         <style>
-            body {{ font-family: Arial, sans-serif; margin: 30px; color: #000; background-color: #fff; }}
-            .header-table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; }}
-            .address {{ font-size: 13px; line-height: 1.4; margin-top: 5px; }}
-            .title {{ text-align: center; font-size: 24px; font-weight: bold; margin: 25px 0; }}
-            .info-table, .items-table {{ width: 100%; border-collapse: collapse; text-align: center; }}
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; color: #1e293b; background-color: #fff; }}
+            .header-table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; }}
+            .address {{ font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 8px; }}
+            .title {{ text-align: center; font-size: 26px; font-weight: 800; text-transform: uppercase; color: #0f172a; margin: 30px 0; border-bottom: 2px solid #0f172a; padding-bottom: 10px; }}
+            .info-table, .items-table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
             .info-table th, .info-table td, .items-table th, .items-table td {{
-                border: 2px solid black;
-                padding: 8px;
+                border: 1px solid #94a3b8;
+                padding: 10px;
                 font-size: 13px;
             }}
-            .info-table th, .items-table th {{ background-color: #f2f2f2; font-weight: bold; }}
-            .items-table {{ margin-top: 20px; }}
+            .info-table th, .items-table th {{ background-color: #f1f5f9; font-weight: bold; color: #0f172a; text-transform: uppercase; }}
         </style>
     </head>
     <body>
@@ -152,16 +145,15 @@ def generate_be_html(be_data, client_logo_path, is_bs=False):
         <table class="header-table">
             <tr>
                 <td style="width: 50%; vertical-align: top;">
-                    {f'<img src="data:image/jpeg;base64,{nomatis_logo_b64}" height="55">' if nomatis_logo_b64 else '<h2>NOMATIS</h2>'}
+                    {f'<img src="data:image/jpeg;base64,{nomatis_logo_b64}" height="60">' if nomatis_logo_b64 else '<h2 style="margin:0; color:#0284c7;">NOMATIS</h2>'}
                     <div class="address">
-                        <strong>NOMATIS</strong><br>
-                        32 Rue Al Hatim<br>
-                        les Orangers<br>
-                        10000
+                        <strong>NOMATIS S.A.R.L</strong><br>
+                        32 Rue Al Hatim, Les Orangers<br>
+                        Rabat, Maroc
                     </div>
                 </td>
                 <td style="width: 50%; text-align: right; vertical-align: top;">
-                    {f'<img src="data:image/jpeg;base64,{client_logo_b64}" height="55">' if client_logo_b64 else '<h2>LOGO CLIENT</h2>'}
+                    {f'<img src="data:image/jpeg;base64,{client_logo_b64}" height="60">' if client_logo_b64 else '<h2>CLIENT</h2>'}
                 </td>
             </tr>
         </table>
@@ -175,13 +167,13 @@ def generate_be_html(be_data, client_logo_path, is_bs=False):
                     <th>Date</th>
                     <th>{col3_header}</th>
                     <th>{col4_header}</th>
-                    <th>Établi / Réceptionné par</th>
-                    <th>Stock</th>
+                    <th>Agent</th>
+                    <th>Espace Client</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td>{be_data.get('id', '')}</td>
+                    <td><strong>{be_data.get('id', '')}</strong></td>
                     <td>{be_data.get('date_be', be_data.get('date_bs', ''))}</td>
                     <td>{col3_val}</td>
                     <td>{col4_val}</td>
@@ -195,8 +187,8 @@ def generate_be_html(be_data, client_logo_path, is_bs=False):
             <thead>
                 <tr>
                     <th style="width: 25%;">Référence</th>
-                    <th style="width: 60%;">Désignation</th>
-                    <th style="width: 15%;">Qté</th>
+                    <th style="width: 60%;">Désignation Article</th>
+                    <th style="width: 15%;">Quantité</th>
                 </tr>
             </thead>
             <tbody>
@@ -210,151 +202,223 @@ def generate_be_html(be_data, client_logo_path, is_bs=False):
 
 
 # =========================================================
-# ÉCRAN DE CONNEXION (PAGE 1 : BLEU, BLANC, TOUCHES DE VERT)
+# PAGE 1 : CONNEXION (BLEU, BLANC, TOUCHES DE VERT, ROUGE)
 # =========================================================
 if not st.session_state.logged_in:
     st.markdown(
         """
     <style>
         .stApp {
-            background-color: #0d1b2a;
+            background: linear-gradient(135deg, #0b132b 0%, #1c2541 100%);
             color: #ffffff;
         }
-        h1, h2, h3, h4, label {
+        .login-wrapper {
+            max-width: 450px;
+            margin: 80px auto 0 auto;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            text-align: center;
+        }
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff !important;
+            margin-bottom: 5px;
+        }
+        .login-subtitle {
+            font-size: 14px;
+            color: #10b981 !important;
+            font-weight: 600;
+            margin-bottom: 25px;
+        }
+        /* Style des Inputs */
+        div[data-baseweb="input"] {
+            background-color: rgba(255, 255, 255, 0.08) !important;
+            border-radius: 8px !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
             color: #ffffff !important;
         }
-        .login-card {
-            background-color: #1b263b;
-            padding: 30px;
-            border-radius: 12px;
-            border: 1px solid #415a77;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+        div[data-baseweb="input"]:focus-within {
+            border-color: #10b981 !important;
         }
-        .btn-red button {
-            background-color: #d90429 !important;
+        input {
+            color: #ffffff !important;
+        }
+        label {
+            color: #e2e8f0 !important;
+            font-weight: 500;
+        }
+        /* Bouton rouge */
+        .btn-connect button {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
             color: #ffffff !important;
             border: none !important;
             font-size: 16px !important;
-            font-weight: bold !important;
-            border-radius: 6px !important;
-            padding: 10px !important;
+            font-weight: 700 !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
+            transition: all 0.3s ease !important;
+            margin-top: 15px;
+        }
+        .btn-connect button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4) !important;
+        }
+        .btn-success button {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+            color: #ffffff !important;
+            border: none !important;
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
         }
     </style>
     """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
 
     with c2:
-        with st.container():
-            st.markdown('<div class="login-card">', unsafe_allow_html=True)
-            col_img, col_txt = st.columns([1, 3])
-            with col_img:
-                if os.path.exists("Logo Nomatis.jpg"):
-                    st.image("Logo Nomatis.jpg", width=90)
-                else:
-                    st.markdown("## [LOGO]")
-            with col_txt:
+        st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
+
+        if os.path.exists("Logo Nomatis.jpg"):
+            st.image("Logo Nomatis.jpg", width=110)
+
+        st.markdown(
+            '<div class="login-title">Gestion Stock MW NOMATIS</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="login-subtitle">● Plateforme de Gestion Multi-Clients</div>',
+            unsafe_allow_html=True,
+        )
+
+        username_input = st.text_input("Nom d'utilisateur", key="u_in")
+        password_input = st.text_input(
+            "Mot de passe", type="password", key="p_in"
+        )
+
+        st.markdown('<div class="btn-connect">', unsafe_allow_html=True)
+        login_clicked = st.button(
+            "SE CONNECTER", use_container_width=True, key="btn_log"
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if login_clicked:
+            if (
+                username_input in st.session_state.users_db
+                and st.session_state.users_db[username_input]["password"]
+                == password_input
+            ):
+                st.session_state.logged_in = True
+                st.session_state.current_user = username_input
+                st.session_state.users_db[username_input][
+                    "last_login"
+                ] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
                 st.markdown(
-                    "<h2 style='margin-top:10px; color:#2ec4b6 !important;'>Gestion Stock MW NOMATIS</h2>",
+                    """
+                <style>
+                    .btn-connect button {
+                        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+                    }
+                </style>
+                """,
                     unsafe_allow_html=True,
                 )
+                st.success("Accès validé ! Redirection...")
+                st.rerun()
+            else:
+                st.error("Identifiants incorrects. Veuillez réessayer.")
 
-            st.write("---")
-            username_input = st.text_input("Nom d'utilisateur", key="user_in")
-            password_input = st.text_input(
-                "Mot de passe", type="password", key="pass_in"
-            )
-
-            st.markdown('<div class="btn-red">', unsafe_allow_html=True)
-            login_clicked = st.button("SE CONNECTER", use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            if login_clicked:
-                if (
-                    username_input in st.session_state.users_db
-                    and st.session_state.users_db[username_input]["password"]
-                    == password_input
-                ):
-                    st.session_state.logged_in = True
-                    st.session_state.current_user = username_input
-                    st.session_state.users_db[username_input][
-                        "last_login"
-                    ] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                    # Bouton devient vert lors de la validation
-                    st.markdown(
-                        """
-                    <style>
-                        .btn-red button { background-color: #2ec4b6 !important; }
-                    </style>
-                    """,
-                        unsafe_allow_html=True,
-                    )
-                    st.success("Accès validé ! Redirection...")
-                    st.rerun()
-                else:
-                    st.error("Identifiants incorrects. Veuillez réessayer.")
-
-            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 
 # =========================================================
-# APPLICATION PRINCIPALE APPRÈS CONNEXION
+# APPLICATION APRÈS CONNEXION
 # =========================================================
 current_user_info = st.session_state.users_db[st.session_state.current_user]
 user_role = current_user_info["role"]
 
 # ---------------------------------------------------------
-# ÉCRAN DE SÉLECTION DU CLIENT (THÈME BLANC / ÉCRITURE NOIRE)
+# ÉCRAN DE SÉLECTION CLIENT (BLANC / NOIR ET BOUTON BLEU)
 # ---------------------------------------------------------
 if not st.session_state.selected_client:
     st.markdown(
         """
     <style>
         .stApp {
-            background-color: #ffffff;
-            color: #000000;
+            background-color: #f8fafc;
+            color: #0f172a;
         }
         h1, h2, h3, h4, h5, h6, label, p, span, div {
-            color: #000000 !important;
+            color: #0f172a !important;
         }
-        .client-card {
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            padding: 15px;
+        .header-bar {
+            background-color: #ffffff;
+            padding: 20px 30px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            margin-bottom: 30px;
+        }
+        .client-card-box {
+            background: #ffffff;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 25px;
             text-align: center;
-            background-color: #f9f9f9;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
         }
-        .btn-client-stock button {
-            background-color: #0056b3 !important;
+        .client-card-box:hover {
+            border-color: #2563eb;
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.1);
+        }
+        .btn-acc-stock button {
+            background-color: #1d4ed8 !important;
             color: #ffffff !important;
-            font-weight: bold !important;
-            border: none !important;
-            border-radius: 5px !important;
+            font-weight: 700 !important;
             font-size: 15px !important;
-            padding: 8px 16px !important;
+            border: 2px solid #1d4ed8 !important;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            transition: all 0.2s ease !important;
         }
-        .btn-client-stock button:hover {
-            background-color: #003d82 !important;
-            color: #ffffff !important;
+        .btn-acc-stock button:hover {
+            background-color: #ffffff !important;
+            color: #1d4ed8 !important;
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
+            background-color: #f1f5f9;
+            padding: 6px;
+            border-radius: 10px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            border-radius: 6px;
+            font-weight: 600;
         }
     </style>
     """,
         unsafe_allow_html=True,
     )
 
-    c_head1, c_head2 = st.columns([3, 1])
-    with c_head1:
+    c_h1, c_h2 = st.columns([3, 1])
+    with c_h1:
         st.title("Gestion Stock MW NOMATIS")
-        st.write(
-            f"Bienvenue, **{current_user_info['name']}** ({user_role.upper()})"
+        st.markdown(
+            f"Connecté en tant que : **{current_user_info['name']}** (`{user_role.upper()}`)"
         )
-    with c_head2:
+    with c_h2:
         if st.button("🚪 Déconnexion", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.selected_client = None
@@ -366,28 +430,25 @@ if not st.session_state.selected_client:
     cols_clients = st.columns(3)
     for idx, (client_name, info) in enumerate(CLIENTS_INFO.items()):
         with cols_clients[idx]:
-            st.markdown('<div class="client-card">', unsafe_allow_html=True)
+            st.markdown('<div class="client-card-box">', unsafe_allow_html=True)
 
-            # Fixation de la taille d'image sans paramètre height invalide
             if os.path.exists(info["logo"]):
-                st.image(info["logo"], width=120)
+                st.image(info["logo"], width=130)
             else:
                 st.markdown(
-                    f"<h2 style='height:100px; line-height:100px;'>{client_name}</h2>",
+                    f"<h2 style='height:80px;'>{client_name}</h2>",
                     unsafe_allow_html=True,
                 )
 
             st.markdown(
-                f"<h3 style='color:{info['color']} !important;'>{client_name}</h3>",
+                f"<h3 style='color:{info['color']} !important; margin:15px 0;'>{client_name}</h3>",
                 unsafe_allow_html=True,
             )
 
-            st.markdown(
-                '<div class="btn-client-stock">', unsafe_allow_html=True
-            )
+            st.markdown('<div class="btn-acc-stock">', unsafe_allow_html=True)
             if st.button(
                 "Accéder au stock",
-                key=f"btn_acc_{client_name}",
+                key=f"btn_c_{client_name}",
                 use_container_width=True,
             ):
                 st.session_state.selected_client = client_name
@@ -398,21 +459,21 @@ if not st.session_state.selected_client:
     st.divider()
 
     # ---------------------------------------------------------
-    # GESTION DES UTILISATEURS (PAGE CLIENT)
+    # GESTION UTILISATEURS (PAGE D'ACCUEIL CLIENTS)
     # ---------------------------------------------------------
     if user_role == "admin":
         st.subheader("🛠️ Gestion des Utilisateurs (Administrateur)")
-        tab_u_create, tab_u_manage = st.tabs(
+        t_user_create, t_user_list = st.tabs(
             ["Créer un utilisateur", "Liste & Modifications"]
         )
 
-        with tab_u_create:
+        with t_user_create:
             with st.form("form_create_user"):
-                c_u1, c_u2 = st.columns(2)
-                with c_u1:
+                cu1, cu2 = st.columns(2)
+                with cu1:
                     new_u_id = st.text_input("Identifiant (login)")
                     new_u_name = st.text_input("Nom complet")
-                with c_u2:
+                with cu2:
                     new_u_pass = st.text_input(
                         "Mot de passe", type="password"
                     )
@@ -421,7 +482,7 @@ if not st.session_state.selected_client:
                         ["admin", "magasinier", "coordinateur", "coordinatrice"],
                     )
 
-                if st.form_submit_button("➕ Enregistrer le nouvel utilisateur"):
+                if st.form_submit_button("➕ Enregistrer l'utilisateur"):
                     if new_u_id and new_u_pass and new_u_name:
                         if new_u_id not in st.session_state.users_db:
                             st.session_state.users_db[new_u_id] = {
@@ -431,45 +492,39 @@ if not st.session_state.selected_client:
                                 "last_login": "Jamais",
                             }
                             st.success(
-                                f"Compte '{new_u_id}' créé avec succès !"
+                                f"Utilisateur '{new_u_id}' créé avec succès !"
                             )
                             st.rerun()
                         else:
-                            st.error("Cet identifiant existe déjà.")
+                            st.error("Identifiant déjà existant.")
                     else:
-                        st.error("Veuillez remplir tous les champs.")
+                        st.error("Champs obligatoires manquants.")
 
-        with tab_u_manage:
-            u_table_data = []
-            for u_key, u_val in st.session_state.users_db.items():
-                u_table_data.append(
+        with t_user_list:
+            u_data = []
+            for k, v in st.session_state.users_db.items():
+                u_data.append(
                     {
-                        "Identifiant": u_key,
-                        "Nom Complet": u_val["name"],
-                        "Rôle": u_val["role"],
-                        "Dernière Connexion": u_val.get(
-                            "last_login", "Jamais"
-                        ),
+                        "Login": k,
+                        "Nom Complet": v["name"],
+                        "Rôle": v["role"],
+                        "Dernière Connexion": v.get("last_login", "Jamais"),
                     }
                 )
-            st.dataframe(pd.DataFrame(u_table_data), use_container_width=True)
+            st.dataframe(pd.DataFrame(u_data), use_container_width=True)
 
             st.write("---")
             st.write("##### Modifier un compte existant")
             target_user = st.selectbox(
-                "Sélectionner l'utilisateur à modifier",
+                "Sélectionner l'utilisateur",
                 list(st.session_state.users_db.keys()),
             )
-            selected_u_data = st.session_state.users_db[target_user]
+            u_info = st.session_state.users_db[target_user]
 
             with st.form("form_edit_user"):
-                edit_name = st.text_input(
-                    "Nom complet", value=selected_u_data["name"]
-                )
-                edit_pass = st.text_input(
-                    "Mot de passe", value=selected_u_data["password"]
-                )
-                edit_role = st.selectbox(
+                e_name = st.text_input("Nom complet", value=u_info["name"])
+                e_pass = st.text_input("Mot de passe", value=u_info["password"])
+                e_role = st.selectbox(
                     "Rôle",
                     ["admin", "magasinier", "coordinateur", "coordinatrice"],
                     index=[
@@ -477,79 +532,97 @@ if not st.session_state.selected_client:
                         "magasinier",
                         "coordinateur",
                         "coordinatrice",
-                    ].index(selected_u_data["role"]),
+                    ].index(u_info["role"]),
                 )
 
                 if st.form_submit_button("💾 Mettre à jour"):
-                    st.session_state.users_db[target_user]["name"] = edit_name
-                    st.session_state.users_db[target_user][
-                        "password"
-                    ] = edit_pass
-                    st.session_state.users_db[target_user]["role"] = edit_role
-                    st.success("Utilisateur mis à jour avec succès !")
+                    st.session_state.users_db[target_user]["name"] = e_name
+                    st.session_state.users_db[target_user]["password"] = e_pass
+                    st.session_state.users_db[target_user]["role"] = e_role
+                    st.success("Mise à jour effectuée !")
                     st.rerun()
 
     else:
         st.subheader("⚙️ Mon Compte Utilisateur")
         with st.form("form_self_edit"):
-            self_name = st.text_input(
+            s_name = st.text_input(
                 "Nom complet", value=current_user_info["name"]
             )
-            self_pass = st.text_input(
+            s_pass = st.text_input(
                 "Mot de passe", value=current_user_info["password"]
             )
 
-            if st.form_submit_button("💾 Mettre à jour mes informations"):
+            if st.form_submit_button("💾 Sauvegarder les modifications"):
                 st.session_state.users_db[st.session_state.current_user][
                     "name"
-                ] = self_name
+                ] = s_name
                 st.session_state.users_db[st.session_state.current_user][
                     "password"
-                ] = self_pass
-                st.success("Profil mis à jour !")
+                ] = s_pass
+                st.success("Informations mises à jour !")
                 st.rerun()
 
     st.stop()
 
 
 # ---------------------------------------------------------
-# DÉFINITION DU THÈME POUR LES 5 RUBRIQUES ESPACE CLIENT
+# THÈME POUR LES 5 RUBRIQUES ESPACE CLIENT (SOMBRE PRO)
 # ---------------------------------------------------------
 st.markdown(
     """
 <style>
     .stApp {
-        background-color: #0f172a;
+        background: #0f172a;
         color: #f8fafc;
     }
     h1, h2, h3, h4, h5, h6, label, p, span {
         color: #f8fafc !important;
     }
-    .stButton>button {
-        border-radius: 6px;
-        font-weight: bold;
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #1e293b;
+        padding: 8px;
+        border-radius: 12px;
+        border: 1px solid #334155;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
+        color: #94a3b8 !important;
+        font-weight: 600;
+        padding: 10px 16px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #2563eb !important;
+        color: #ffffff !important;
+    }
+    div[data-baseweb="input"], div[data-baseweb="select"] {
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 8px !important;
+        color: #ffffff !important;
     }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
+# Header Espace Client
 c_top1, c_top2, c_top3 = st.columns([2, 3, 2])
 with c_top1:
     if os.path.exists("Logo Nomatis.jpg"):
         st.image("Logo Nomatis.jpg", width=110)
 with c_top2:
-    st.title(f"Client : {st.session_state.selected_client}")
+    st.title(f"Espace Client : {st.session_state.selected_client}")
 with c_top3:
     st.write(
-        f"👤 **{current_user_info['name']}** ({user_role.upper()})"
+        f"👤 **{current_user_info['name']}** (`{user_role.upper()}`)"
     )
-    c_sub1, c_sub2 = st.columns(2)
-    with c_sub1:
+    cb1, cb2 = st.columns(2)
+    with cb1:
         if st.button("🔄 Changer Client", use_container_width=True):
             st.session_state.selected_client = None
             st.rerun()
-    with c_sub2:
+    with cb2:
         if st.button("🚪 Déconnexion", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.selected_client = None
@@ -557,13 +630,13 @@ with c_top3:
 
 st.divider()
 
-# LES 5 RUBRIQUES
+# LES 5 RUBRIQUES BONS ET STOCK
 t_be, t_bs, t_stock, t_mods, t_config = st.tabs(
     [
-        "📥 BE (Bon d'Entrée)",
-        "📤 BS (Bon de Sortie)",
+        "📥 Bon d'Entrée (BE)",
+        "📤 Bon de Sortie (BS)",
         "📊 Situation Stock",
-        "✏️ Modification & Impression",
+        "✏️ Modifications & Impression",
         "⚙️ Configuration",
     ]
 )
@@ -572,44 +645,44 @@ t_be, t_bs, t_stock, t_mods, t_config = st.tabs(
 # RUBRIQUE 1 : BON D'ENTRÉE (BE)
 # =========================================================
 with t_be:
-    st.subheader("Saisie d'un Bon d'Entrée (BE)")
+    st.subheader("Création d'un Bon d'Entrée (BE)")
 
     if user_role in ["coordinateur", "coordinatrice"]:
         st.warning(
-            "🔒 Votre rôle ne vous permet pas de créer des Bons d'Entrée (Consultation et Impression uniquement)."
+            "🔒 Rôle restreint : Consultation et impression des bons uniquement."
         )
     else:
-        c_be1, c_be2, c_be3 = st.columns(3)
-        with c_be1:
+        cbe1, cbe2, cbe3 = st.columns(3)
+        with cbe1:
             dt_auto = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.text_input(
-                "Date et Heure de Saisie (Auto)", value=dt_auto, disabled=True
+                "Date/Heure Saisie (Auto)", value=dt_auto, disabled=True
             )
-        with c_be2:
+        with cbe2:
             date_be = st.date_input(
-                "Date du BE", max_value=date.today(), key="be_date_input"
+                "Date du BE", max_value=date.today(), key="be_date_in"
             )
-        with c_be3:
+        with cbe3:
             num_be = st.text_input(
                 "Numéro de BE", value=f"BE-{len(st.session_state.be_list)+1:04d}"
             )
 
-        c_be4, c_be5, c_be6 = st.columns(3)
-        with c_be4:
+        cbe4, cbe5, cbe6 = st.columns(3)
+        with cbe4:
             f_options = st.session_state.config["fournisseurs"] + [
                 "Autre (Saisir)"
             ]
             sel_f = st.selectbox("Fournisseur", f_options)
             fournisseur_val = (
-                st.text_input("Préciser Fournisseur")
+                st.text_input("Saisir Fournisseur")
                 if sel_f == "Autre (Saisir)"
                 else sel_f
             )
-        with c_be5:
+        with cbe5:
             lieu_liv = st.text_input(
                 "Lieu de livraison", value="Magasin Principal"
             )
-        with c_be6:
+        with cbe6:
             st.text_input(
                 "Réceptionné par (Auto)",
                 value=current_user_info["name"],
@@ -617,25 +690,23 @@ with t_be:
             )
 
         st.write("---")
-        st.write("##### Saisie des articles :")
+        st.write("##### Articles du Bon :")
 
-        col_ref, col_art, col_qte, col_rem = st.columns([2, 3, 2, 3])
-        with col_ref:
-            ref_i = st.text_input("Référence", key="be_ref_in")
-        with col_art:
+        cr, ca, cq, cm = st.columns([2, 3, 2, 3])
+        with cr:
+            ref_i = st.text_input("Référence", key="be_ref")
+        with ca:
             art_i = st.selectbox(
-                "Article (Liste prédéfinie)",
-                st.session_state.config["articles"],
-                key="be_art_in",
+                "Article", st.session_state.config["articles"], key="be_art"
             )
-        with col_qte:
+        with cq:
             qte_i = st.number_input(
-                "Quantité (> 0)", min_value=1, step=1, key="be_qte_in"
+                "Quantité (> 0)", min_value=1, step=1, key="be_qte"
             )
-        with col_rem:
-            rem_i = st.text_input("Remarque", key="be_rem_in")
+        with cm:
+            rem_i = st.text_input("Remarque", key="be_rem")
 
-        if st.button("➕ Ajouter l'article au bon"):
+        if st.button("➕ Ajouter l'article"):
             if qte_i <= 0:
                 st.error("La quantité doit être supérieure à 0.")
             else:
@@ -658,15 +729,14 @@ with t_be:
                 st.success(f"Article {art_i} ajouté au bon.")
 
         if st.session_state.temp_be_items:
-            st.write("##### Tableau des articles du Bon :")
             st.dataframe(
                 pd.DataFrame(st.session_state.temp_be_items),
                 use_container_width=True,
             )
 
-            c_save_be, c_clr_be = st.columns([2, 1])
-            with c_save_be:
-                if st.button("💾 Enregistrer le Bon d'Entrée", use_container_width=True):
+            csave, cclr = st.columns([2, 1])
+            with csave:
+                if st.button("💾 Enregistrer le BE", use_container_width=True):
                     be_record = {
                         "id": num_be,
                         "datetime_saisie": dt_auto,
@@ -686,11 +756,11 @@ with t_be:
 
                     st.session_state.be_list.append(be_record)
                     st.session_state.temp_be_items = []
-                    st.success(f"Bon d'Entrée {num_be} enregistré !")
+                    st.success(f"BE {num_be} enregistré !")
                     st.rerun()
 
-            with c_clr_be:
-                if st.button("🗑️ Vider la liste", use_container_width=True):
+            with cclr:
+                if st.button("🗑️ Vider", use_container_width=True):
                     st.session_state.temp_be_items = []
                     st.rerun()
 
@@ -699,54 +769,51 @@ with t_be:
 # RUBRIQUE 2 : BON DE SORTIE (BS)
 # =========================================================
 with t_bs:
-    st.subheader("Saisie d'un Bon de Sortie (BS)")
+    st.subheader("Création d'un Bon de Sortie (BS)")
 
     if user_role in ["coordinateur", "coordinatrice"]:
         st.warning(
-            "🔒 Votre rôle ne vous permet pas de créer des Bons de Sortie (Consultation et Impression uniquement)."
+            "🔒 Rôle restreint : Consultation et impression des bons uniquement."
         )
     else:
-        c_bs1, c_bs2, c_bs3 = st.columns(3)
-        with c_bs1:
+        cbs1, cbs2, cbs3 = st.columns(3)
+        with cbs1:
             dt_bs_auto = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.text_input(
-                "Date et Heure de Saisie (Auto)",
-                value=dt_bs_auto,
-                disabled=True,
-                key="bs_dt_auto",
+                "Date/Heure Saisie (Auto)", value=dt_bs_auto, disabled=True
             )
-        with c_bs2:
+        with cbs2:
             date_bs = st.date_input(
-                "Date du BS", max_value=date.today(), key="bs_date_input"
+                "Date du BS", max_value=date.today(), key="bs_date_in"
             )
-        with c_bs3:
+        with cbs3:
             num_bs = st.text_input(
                 "Numéro de BS", value=f"BS-{len(st.session_state.bs_list)+1:04d}"
             )
 
-        c_bs4, c_bs5 = st.columns(2)
-        with c_bs4:
+        cbs4, cbs5 = st.columns(2)
+        with cbs4:
             eq_sel = st.selectbox(
                 "Équipe réceptrice", st.session_state.config["equipes"]
             )
-        with c_bs5:
+        with cbs5:
             dest_bs = st.text_input("Destination / Projet")
 
         st.write("---")
-        st.write("##### Saisie des articles à sortir :")
+        st.write("##### Articles du Bon :")
 
-        col_bs_art, col_bs_qte, col_bs_rem = st.columns([3, 2, 3])
-        with col_bs_art:
+        csa, csq, csm = st.columns([3, 2, 3])
+        with csa:
             art_bs_sel = st.selectbox(
                 "Article", st.session_state.config["articles"], key="bs_art_sel"
             )
-        with col_bs_qte:
+        with csq:
             stk_dispo = st.session_state.stock_db.get(art_bs_sel, 0)
-            st.caption(f"Stock disponible : **{stk_dispo}**")
+            st.caption(f"Stock dispo : **{stk_dispo}**")
             qte_bs_sel = st.number_input(
                 "Quantité à sortir", min_value=1, step=1, key="bs_qte_sel"
             )
-        with col_bs_rem:
+        with csm:
             rem_bs_sel = st.text_input("Remarque", key="bs_rem_sel")
 
         if st.button("➕ Ajouter l'article à la sortie"):
@@ -754,16 +821,14 @@ with t_bs:
                 st.error("La quantité doit être supérieure à 0.")
             elif qte_bs_sel > stk_dispo:
                 st.error(
-                    f"Quantité insuffisante ! Stock disponible : {stk_dispo}"
+                    f"Stock insuffisant ! Stock disponible : {stk_dispo}"
                 )
             else:
                 found = False
                 for item in st.session_state.temp_bs_items:
                     if item["Article"] == art_bs_sel:
                         if (item["Quantité"] + qte_bs_sel) > stk_dispo:
-                            st.error(
-                                "Le cumul dépasse le stock disponible !"
-                            )
+                            st.error("Le cumul dépasse le stock !")
                             found = True
                             break
                         item["Quantité"] += qte_bs_sel
@@ -780,18 +845,17 @@ with t_bs:
                             "Remarque": rem_bs_sel,
                         }
                     )
-                    st.success(f"Article {art_bs_sel} ajouté au bon.")
+                    st.success(f"Article {art_bs_sel} ajouté.")
 
         if st.session_state.temp_bs_items:
-            st.write("##### Tableau des articles du Bon de Sortie :")
             st.dataframe(
                 pd.DataFrame(st.session_state.temp_bs_items),
                 use_container_width=True,
             )
 
-            c_save_bs, c_clr_bs = st.columns([2, 1])
-            with c_save_bs:
-                if st.button("💾 Enregistrer le Bon de Sortie", use_container_width=True):
+            csave_bs, cclr_bs = st.columns([2, 1])
+            with csave_bs:
+                if st.button("💾 Enregistrer le BS", use_container_width=True):
                     if not dest_bs:
                         st.error("Veuillez renseigner la destination.")
                     else:
@@ -812,11 +876,11 @@ with t_bs:
 
                         st.session_state.bs_list.append(bs_record)
                         st.session_state.temp_bs_items = []
-                        st.success(f"Bon de Sortie {num_bs} enregistré !")
+                        st.success(f"BS {num_bs} enregistré !")
                         st.rerun()
 
-            with c_clr_bs:
-                if st.button("🗑️ Vider la liste BS", use_container_width=True):
+            with cclr_bs:
+                if st.button("🗑️ Vider BS", use_container_width=True):
                     st.session_state.temp_bs_items = []
                     st.rerun()
 
@@ -826,7 +890,7 @@ with t_bs:
 # =========================================================
 with t_stock:
     st.subheader(
-        f"📊 Situation du Stock à Jour — {st.session_state.selected_client}"
+        f"📊 Situation du Stock à Jour — Client {st.session_state.selected_client}"
     )
 
     stock_summary = []
@@ -864,7 +928,7 @@ with t_stock:
 
 
 # =========================================================
-# RUBRIQUE 4 : MODIFICATION & IMPRESSION DES BONS
+# RUBRIQUE 4 : MODIFICATION & IMPRESSION BONS
 # =========================================================
 with t_mods:
     st.subheader("✏️ Modification & Impression des Bons")
@@ -883,7 +947,7 @@ with t_mods:
         ]
 
         if not client_bes:
-            st.info("Aucun Bon d'Entrée enregistré pour ce client.")
+            st.info("Aucun Bon d'Entrée disponible.")
         else:
             sel_be_id = st.selectbox(
                 "Choisir un Bon d'Entrée", [b["id"] for b in client_bes]
@@ -892,7 +956,6 @@ with t_mods:
 
             st.write("---")
             if user_role in ["admin", "magasinier"]:
-                st.write("##### Modifier les informations du Bon :")
                 with st.form("form_edit_be"):
                     e_fournis = st.text_input(
                         "Fournisseur", value=be_target["fournisseur"]
@@ -901,19 +964,18 @@ with t_mods:
                         "Lieu de livraison", value=be_target["lieu_livraison"]
                     )
 
-                    if st.form_submit_button("💾 Enregistrer les modifications"):
+                    if st.form_submit_button("💾 Sauvegarder modifications"):
                         be_target["fournisseur"] = e_fournis
                         be_target["lieu_livraison"] = e_lieu
-                        st.success("Informations du BE mises à jour !")
+                        st.success("Modifications enregistrées !")
                         st.rerun()
 
-            st.write("##### Contenu du bon :")
             st.dataframe(
                 pd.DataFrame(be_target["items"]), use_container_width=True
             )
 
-            col_be_act1, col_be_act2 = st.columns(2)
-            with col_be_act1:
+            cb_act1, cb_act2 = st.columns(2)
+            with cb_act1:
                 if user_role in ["admin", "magasinier"]:
                     if st.button("❌ Supprimer ce BE", use_container_width=True):
                         for it in be_target["items"]:
@@ -928,13 +990,13 @@ with t_mods:
                         st.success("BE supprimé et stock mis à jour !")
                         st.rerun()
 
-            with col_be_act2:
+            with cb_act2:
                 logo_path = CLIENTS_INFO[st.session_state.selected_client][
                     "logo"
                 ]
                 html_data = generate_be_html(be_target, logo_path, is_bs=False)
                 st.download_button(
-                    label="🖨️ Télécharger / Imprimer BE (Format HTML/Word)",
+                    label="🖨️ Imprimer / Télécharger BE (HTML/Word)",
                     data=html_data,
                     file_name=f"{be_target['id']}.html",
                     mime="text/html",
@@ -949,7 +1011,7 @@ with t_mods:
         ]
 
         if not client_bss:
-            st.info("Aucun Bon de Sortie enregistré pour ce client.")
+            st.info("Aucun Bon de Sortie disponible.")
         else:
             sel_bs_id = st.selectbox(
                 "Choisir un Bon de Sortie", [b["id"] for b in client_bss]
@@ -958,7 +1020,6 @@ with t_mods:
 
             st.write("---")
             if user_role in ["admin", "magasinier"]:
-                st.write("##### Modifier les informations du Bon :")
                 with st.form("form_edit_bs"):
                     e_eq = st.selectbox(
                         "Équipe",
@@ -974,19 +1035,18 @@ with t_mods:
                         "Destination", value=bs_target["destination"]
                     )
 
-                    if st.form_submit_button("💾 Enregistrer les modifications"):
+                    if st.form_submit_button("💾 Sauvegarder modifications"):
                         bs_target["equipe"] = e_eq
                         bs_target["destination"] = e_dest
-                        st.success("Informations du BS mises à jour !")
+                        st.success("Modifications enregistrées !")
                         st.rerun()
 
-            st.write("##### Contenu du bon :")
             st.dataframe(
                 pd.DataFrame(bs_target["items"]), use_container_width=True
             )
 
-            col_bs_act1, col_bs_act2 = st.columns(2)
-            with col_bs_act1:
+            cbs_act1, cbs_act2 = st.columns(2)
+            with cbs_act1:
                 if user_role in ["admin", "magasinier"]:
                     if st.button("❌ Supprimer ce BS", use_container_width=True):
                         for it in bs_target["items"]:
@@ -998,16 +1058,16 @@ with t_mods:
                             for b in st.session_state.bs_list
                             if b["id"] != sel_bs_id
                         ]
-                        st.success("BS supprimé et stock réintégré !")
+                        st.success("BS supprimé et stock restitué !")
                         st.rerun()
 
-            with col_bs_act2:
+            with cbs_act2:
                 logo_path = CLIENTS_INFO[st.session_state.selected_client][
                     "logo"
                 ]
                 html_bs_data = generate_be_html(bs_target, logo_path, is_bs=True)
                 st.download_button(
-                    label="🖨️ Télécharger / Imprimer BS (Format HTML/Word)",
+                    label="🖨️ Imprimer / Télécharger BS (HTML/Word)",
                     data=html_bs_data,
                     file_name=f"{bs_target['id']}.html",
                     mime="text/html",
@@ -1016,19 +1076,19 @@ with t_mods:
 
 
 # =========================================================
-# RUBRIQUE 5 : CONFIGURATION (RÉSERVÉE A L'ADMIN)
+# RUBRIQUE 5 : CONFIGURATION ADMIN
 # =========================================================
 with t_config:
     if user_role != "admin":
-        st.error("🔒 Cette rubrique est strictly réservée à l'administrateur.")
+        st.error("🔒 Section réservée à l'administrateur.")
     else:
         st.subheader("⚙️ Configuration Référentiels & Stock")
 
-        col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+        cfg1, cfg2, cfg3 = st.columns(3)
 
-        with col_cfg1:
+        with cfg1:
             st.write("##### 📦 Articles")
-            add_art = st.text_input("Nouvel article", key="cfg_add_art")
+            add_art = st.text_input("Nouvel article", key="cfg_art_add")
             if st.button("Ajouter Article"):
                 if (
                     add_art
@@ -1043,7 +1103,7 @@ with t_config:
             del_art = st.selectbox(
                 "Supprimer un article",
                 st.session_state.config["articles"],
-                key="cfg_del_art",
+                key="cfg_art_del",
             )
             if st.button("Supprimer Article"):
                 st.session_state.config["articles"].remove(del_art)
@@ -1051,9 +1111,9 @@ with t_config:
                 st.success("Article supprimé.")
                 st.rerun()
 
-        with col_cfg2:
+        with cfg2:
             st.write("##### 🏢 Fournisseurs")
-            add_four = st.text_input("Nouveau fournisseur", key="cfg_add_four")
+            add_four = st.text_input("Nouveau fournisseur", key="cfg_four_add")
             if st.button("Ajouter Fournisseur"):
                 if (
                     add_four
@@ -1067,16 +1127,16 @@ with t_config:
             del_four = st.selectbox(
                 "Supprimer Fournisseur",
                 st.session_state.config["fournisseurs"],
-                key="cfg_del_four",
+                key="cfg_four_del",
             )
             if st.button("Supprimer Fournisseur"):
                 st.session_state.config["fournisseurs"].remove(del_four)
                 st.success("Fournisseur supprimé.")
                 st.rerun()
 
-        with col_cfg3:
+        with cfg3:
             st.write("##### 👥 Équipes / Ressources")
-            add_eq = st.text_input("Nouvelle équipe", key="cfg_add_eq")
+            add_eq = st.text_input("Nouvelle équipe", key="cfg_eq_add")
             if st.button("Ajouter Équipe"):
                 if add_eq and add_eq not in st.session_state.config["equipes"]:
                     st.session_state.config["equipes"].append(add_eq)
@@ -1087,7 +1147,7 @@ with t_config:
             del_eq = st.selectbox(
                 "Supprimer Équipe",
                 st.session_state.config["equipes"],
-                key="cfg_del_eq",
+                key="cfg_eq_del",
             )
             if st.button("Supprimer Équipe"):
                 st.session_state.config["equipes"].remove(del_eq)
@@ -1097,26 +1157,26 @@ with t_config:
         st.divider()
 
         st.subheader("🛠️ Ajustement Manuel du Stock")
-        c_adj1, c_adj2 = st.columns(2)
-        with c_adj1:
+        cadj1, cadj2 = st.columns(2)
+        with cadj1:
             adj_art = st.selectbox(
                 "Article à ajuster",
                 st.session_state.config["articles"],
-                key="adj_art_sel",
+                key="adj_art",
             )
-        with c_adj2:
-            current_stk = st.session_state.stock_db.get(adj_art, 0)
+        with cadj2:
+            curr_stk = st.session_state.stock_db.get(adj_art, 0)
             new_stk_val = st.number_input(
-                f"Nouveau stock pour {adj_art} (Actuel: {current_stk})",
+                f"Nouveau stock pour {adj_art} (Actuel: {curr_stk})",
                 min_value=0,
-                value=current_stk,
+                value=curr_stk,
             )
 
-        if st.button("💾 Valider l'Ajustement Manuel"):
-            diff = new_stk_val - current_stk
+        if st.button("💾 Appliquer l'Ajustement Manuel"):
+            diff = new_stk_val - curr_stk
             st.session_state.stock_db[adj_art] = new_stk_val
             st.session_state.manual_adjustments[adj_art] = (
                 st.session_state.manual_adjustments.get(adj_art, 0) + diff
             )
-            st.success(f"Stock de {adj_art} mis à jour à {new_stk_val} !")
+            st.success(f"Stock mis à jour pour {adj_art} ({new_stk_val}).")
             st.rerun()
