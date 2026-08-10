@@ -1,1777 +1,1142 @@
 from datetime import datetime, date
-from io import BytesIO
 import os
-import sqlite3
 import base64
-import html
-
 import pandas as pd
 import streamlit as st
-from PIL import Image, ImageOps
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
-)
-from docx import Document
-from docx.shared import Cm
 
-
-# =========================================================
-# CONFIGURATION
-# =========================================================
+# ---------------------------------------------------------
+# CONFIGURATION DE LA PAGE
+# ---------------------------------------------------------
 st.set_page_config(
     page_title="Gestion Stock MW NOMATIS",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-APP_TITLE = "Gestion Stock MW NOMATIS"
-DB_FILE = "stock_mw.db"
-
-CLIENTS = {
-    "Orange": {"logo": "Orange_logo.svg.webp", "color": "#FF6600"},
-    "Inwi": {"logo": "Logo INWI.jpg", "color": "#A1006B"},
-    "ZTE": {"logo": "Logo ZTE.jpg", "color": "#005BAC"},
-}
-
-ROLES = ["admin", "magasinier", "coordinateur", "coordinatrice"]
-
-DEFAULT_ARTICLES = ["câble IF", "câble RJ45", "support 0.3 m", "support 0.6 m"]
-DEFAULT_FOURNISSEURS = ["NEC", "ZTE", "Intégral", "FO connect"]
-DEFAULT_EQUIPES = ["Nabil Team", "Yassine Team", "Issa Team"]
-DEFAULT_RESOURCES = ["Nabil", "Yassine", "Issam"]
-
-# Permissions demandées
-PERMISSIONS = {
-    "admin": {"be", "bs", "stock", "edit", "config"},
-    "magasinier": {"be", "bs", "stock", "edit"},
-    "coordinateur": {"stock", "print"},
-    "coordinatrice": {"stock", "print"},
-}
-
-
-# =========================================================
-# STYLE BLEU / BLANC / UN PEU DE VERT
-# =========================================================
-st.markdown(
-    """
-    <style>
-        .stApp {
-            background: #F8FAFC;
-            color: #0F172A;
-        }
-
-        .block-container {
-            padding-top: 1.2rem;
-            padding-bottom: 2rem;
-        }
-
-        h1, h2, h3, h4, h5, h6, label, p, span, div {
-            color: #0F172A;
-        }
-
-        .main-title {
-            color: #0B4EA2 !important;
-            font-weight: 800;
-            font-size: 30px;
-            margin-top: 5px;
-            margin-bottom: 3px;
-        }
-
-        .subtitle {
-            color: #475569 !important;
-            font-size: 14px;
-        }
-
-        .login-card {
-            background: white;
-            border: 1px solid #D7E2F0;
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 8px 25px rgba(15, 23, 42, 0.08);
-        }
-
-        .section-card {
-            background: white;
-            border: 1px solid #D7E2F0;
-            border-radius: 12px;
-            padding: 18px;
-            margin-bottom: 12px;
-        }
-
-        .stButton > button {
-            border-radius: 8px;
-            font-weight: 700;
-            min-height: 42px;
-        }
-
-        .login-btn > button {
-            background: #DC2626 !important;
-            color: white !important;
-            border: 0 !important;
-        }
-
-        .login-btn > button:hover {
-            background: #B91C1C !important;
-        }
-
-        .valid-btn > button {
-            background: #16A34A !important;
-            color: white !important;
-            border: 0 !important;
-        }
-
-        .stock-btn > button {
-            background: #2563EB !important;
-            color: white !important;
-            border: 2px solid #1D4ED8 !important;
-            font-weight: 800 !important;
-        }
-
-        .stock-btn > button:hover {
-            background: #1D4ED8 !important;
-        }
-
-        .metric-box {
-            background: white;
-            border: 1px solid #D7E2F0;
-            border-radius: 10px;
-            padding: 12px;
-            text-align: center;
-        }
-
-        .small-note {
-            color: #64748B;
-            font-size: 12px;
-        }
-
-        div[data-baseweb="tab-list"] {
-            gap: 8px;
-        }
-
-        button[data-baseweb="tab"] {
-            font-weight: 700;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# =========================================================
-# DATABASE
-# =========================================================
-def get_conn():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    conn = get_conn()
-    cur = conn.cursor()
-
-    cur.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password TEXT NOT NULL,
-            fullname TEXT NOT NULL,
-            role TEXT NOT NULL,
-            last_login TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS articles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS fournisseurs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS equipes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS resources (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS stock (
-            client TEXT NOT NULL,
-            article_id INTEGER NOT NULL,
-            quantity INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (client, article_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS bons (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            number TEXT NOT NULL,
-            client TEXT NOT NULL,
-            date_bon TEXT NOT NULL,
-            datetime_saisie TEXT NOT NULL,
-            fournisseur TEXT,
-            lieu_livraison TEXT,
-            receptionne_par TEXT,
-            equipe TEXT,
-            resource TEXT,
-            destination TEXT,
-            created_by TEXT NOT NULL,
-            UNIQUE(type, number, client)
-        );
-
-        CREATE TABLE IF NOT EXISTS bon_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bon_id INTEGER NOT NULL,
-            article_id INTEGER NOT NULL,
-            reference TEXT,
-            quantity INTEGER NOT NULL,
-            remarque TEXT,
-            FOREIGN KEY(bon_id) REFERENCES bons(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS movements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client TEXT NOT NULL,
-            article_id INTEGER NOT NULL,
-            movement_type TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            reference_bon TEXT,
-            username TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            comment TEXT
-        );
-        """
-    )
-
-    # Compte admin par défaut
-    cur.execute("SELECT COUNT(*) FROM users")
-    if cur.fetchone()[0] == 0:
-        cur.execute(
-            "INSERT INTO users(username,password,fullname,role,last_login) VALUES(?,?,?,?,?)",
-            ("admin", "admin123", "Administrateur", "admin", "Jamais"),
-        )
-        cur.execute(
-            "INSERT INTO users(username,password,fullname,role,last_login) VALUES(?,?,?,?,?)",
-            ("magasinier", "123", "Magasinier Principal", "magasinier", "Jamais"),
-        )
-
-    for name in DEFAULT_ARTICLES:
-        cur.execute("INSERT OR IGNORE INTO articles(name,active) VALUES(?,1)", (name,))
-    for name in DEFAULT_FOURNISSEURS:
-        cur.execute("INSERT OR IGNORE INTO fournisseurs(name,active) VALUES(?,1)", (name,))
-    for name in DEFAULT_EQUIPES:
-        cur.execute("INSERT OR IGNORE INTO equipes(name,active) VALUES(?,1)", (name,))
-    for name in DEFAULT_RESOURCES:
-        cur.execute("INSERT OR IGNORE INTO resources(name,active) VALUES(?,1)", (name,))
-
-    conn.commit()
-    conn.close()
-
-
-init_db()
-
-
-# =========================================================
-# HELPERS
-# =========================================================
-def query(sql, params=(), one=False):
-    conn = get_conn()
-    cur = conn.execute(sql, params)
-    rows = cur.fetchall()
-    conn.close()
-    if one:
-        return rows[0] if rows else None
-    return rows
-
-
-def execute(sql, params=()):
-    conn = get_conn()
-    cur = conn.execute(sql, params)
-    conn.commit()
-    last_id = cur.lastrowid
-    conn.close()
-    return last_id
-
-
-def execute_many(sql, data):
-    conn = get_conn()
-    conn.executemany(sql, data)
-    conn.commit()
-    conn.close()
-
-
-def active_names(table):
-    allowed = {"articles", "fournisseurs", "equipes", "resources"}
-    if table not in allowed:
-        raise ValueError("Table non autorisée")
-    rows = query(f"SELECT name FROM {table} WHERE active=1 ORDER BY name")
-    return [r["name"] for r in rows]
-
-
-def article_rows():
-    return query("SELECT id,name FROM articles WHERE active=1 ORDER BY name")
-
-
-def article_id_by_name(name):
-    row = query("SELECT id FROM articles WHERE name=?", (name,), one=True)
-    return row["id"] if row else None
-
-
-def current_stock(client, article_id):
-    row = query(
-        "SELECT quantity FROM stock WHERE client=? AND article_id=?",
-        (client, article_id),
-        one=True,
-    )
-    return int(row["quantity"]) if row else 0
-
-
-def set_stock(client, article_id, quantity):
-    execute(
-        """
-        INSERT INTO stock(client,article_id,quantity)
-        VALUES(?,?,?)
-        ON CONFLICT(client,article_id)
-        DO UPDATE SET quantity=excluded.quantity
-        """,
-        (client, article_id, int(quantity)),
-    )
-
-
-def add_movement(client, article_id, movement_type, quantity, reference_bon, username, comment=""):
-    execute(
-        """
-        INSERT INTO movements
-        (client,article_id,movement_type,quantity,reference_bon,username,created_at,comment)
-        VALUES(?,?,?,?,?,?,?,?)
-        """,
-        (
-            client,
-            article_id,
-            movement_type,
-            int(quantity),
-            reference_bon,
-            username,
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            comment,
-        ),
-    )
-
-
-def user_info(username):
-    return query("SELECT * FROM users WHERE username=?", (username,), one=True)
-
-
-def can(role, permission):
-    return permission in PERMISSIONS.get(role, set())
-
-
-def format_date(dt):
-    return dt.strftime("%Y-%m-%d")
-
-
-def make_safe_filename(text):
-    return "".join(c if c.isalnum() or c in "-_" else "_" for c in text)
-
-
-def logo_bytes(path):
-    if not os.path.exists(path):
-        return None
-    with open(path, "rb") as f:
-        return f.read()
-
-
-def normalized_logo(path, size=(280, 150)):
-    """Logo client affiché dans un cadre identique sans déformation."""
-    if not os.path.exists(path):
-        return None
-    try:
-        img = Image.open(path).convert("RGB")
-        canvas = Image.new("RGB", size, "white")
-        contained = ImageOps.contain(img, size)
-        x = (size[0] - contained.width) // 2
-        y = (size[1] - contained.height) // 2
-        canvas.paste(contained, (x, y))
-        return canvas
-    except Exception:
-        return None
-
-
-# =========================================================
-# DOCUMENTS BE / BS
-# =========================================================
-def get_bon_items(bon_id):
-    return query(
-        """
-        SELECT bi.*, a.name AS article
-        FROM bon_items bi
-        JOIN articles a ON a.id=bi.article_id
-        WHERE bi.bon_id=?
-        ORDER BY bi.id
-        """,
-        (bon_id,),
-    )
-
-
-def get_bon(bon_id):
-    return query("SELECT * FROM bons WHERE id=?", (bon_id,), one=True)
-
-
-def build_document_data(bon_id):
-    bon = get_bon(bon_id)
-    items = get_bon_items(bon_id)
-    return bon, items
-
-
-def generate_pdf(bon_id):
-    bon, items = build_document_data(bon_id)
-    buffer = BytesIO()
-
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=15 * mm,
-        leftMargin=15 * mm,
-        topMargin=12 * mm,
-        bottomMargin=12 * mm,
-    )
-
-    styles = getSampleStyleSheet()
-    story = []
-
-    # Logos
-    logo_list = []
-    nomatis = logo_bytes("Logo Nomatis.jpg")
-    client_logo = logo_bytes(CLIENTS.get(bon["client"], {}).get("logo", ""))
-
-    if nomatis:
-        p = "nomatis_tmp.jpg"
-        with open(p, "wb") as f:
-            f.write(nomatis)
-        logo_list.append(RLImage(p, width=35 * mm, height=18 * mm))
-    else:
-        logo_list.append(Paragraph("<b>NOMATIS</b>", styles["Normal"]))
-
-    if client_logo:
-        p2 = "client_tmp.jpg"
-        with open(p2, "wb") as f:
-            f.write(client_logo)
-        logo_list.append(RLImage(p2, width=35 * mm, height=18 * mm))
-    else:
-        logo_list.append(Paragraph(bon["client"], styles["Normal"]))
-
-    header = Table([logo_list], colWidths=[90 * mm, 90 * mm])
-    header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(header)
-    story.append(Spacer(1, 8))
-
-    title = "BON D'ENTRÉE" if bon["type"] == "BE" else "BON DE SORTIE"
-    story.append(Paragraph(f"<b>{title}</b>", styles["Title"]))
-    story.append(Spacer(1, 6))
-
-    if bon["type"] == "BE":
-        info = [
-            ["Bon", bon["number"], "Date", bon["date_bon"]],
-            ["Fournisseur", bon["fournisseur"] or "", "Lieu", bon["lieu_livraison"] or ""],
-            ["Réceptionné par", bon["receptionne_par"] or "", "Client", bon["client"]],
-        ]
-    else:
-        info = [
-            ["Bon", bon["number"], "Date", bon["date_bon"]],
-            ["Équipe", bon["equipe"] or "", "Ressource", bon["resource"] or ""],
-            ["Destination", bon["destination"] or "", "Client", bon["client"]],
-        ]
-
-    info_table = Table(info, colWidths=[32 * mm, 58 * mm, 32 * mm, 58 * mm])
-    info_table.setStyle(
-        TableStyle(
-            [
-                ("GRID", (0, 0), (-1, -1), 0.8, colors.black),
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#EAF2FF")),
-                ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#EAF2FF")),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("PADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    story.append(info_table)
-    story.append(Spacer(1, 10))
-
-    data = [["Référence", "Désignation", "Qté", "Remarque"]]
-    for item in items:
-        data.append(
-            [
-                item["reference"] or "",
-                item["article"],
-                str(item["quantity"]),
-                item["remarque"] or "",
-            ]
-        )
-
-    items_table = Table(data, colWidths=[35 * mm, 65 * mm, 20 * mm, 60 * mm], repeatRows=1)
-    items_table.setStyle(
-        TableStyle(
-            [
-                ("GRID", (0, 0), (-1, -1), 0.8, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF2FF")),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("ALIGN", (2, 1), (2, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("PADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    story.append(items_table)
-    story.append(Spacer(1, 12))
-    story.append(
-        Paragraph(
-            f"Saisie le {bon['datetime_saisie']} par {bon['created_by']}",
-            styles["Normal"],
-        )
-    )
-
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
-def generate_docx(bon_id):
-    bon, items = build_document_data(bon_id)
-    doc = Document()
-
-    # Logo NOMATIS
-    if os.path.exists("Logo Nomatis.jpg"):
-        doc.add_picture("Logo Nomatis.jpg", width=Cm(3.0))
-
-    title = "BON D'ENTRÉE" if bon["type"] == "BE" else "BON DE SORTIE"
-    p = doc.add_paragraph()
-    p.alignment = 1
-    run = p.add_run(title)
-    run.bold = True
-    run.font.size = None
-
-    if bon["type"] == "BE":
-        rows = [
-            ["Bon", bon["number"], "Date", bon["date_bon"]],
-            ["Fournisseur", bon["fournisseur"] or "", "Lieu", bon["lieu_livraison"] or ""],
-            ["Réceptionné par", bon["receptionne_par"] or "", "Client", bon["client"]],
-        ]
-    else:
-        rows = [
-            ["Bon", bon["number"], "Date", bon["date_bon"]],
-            ["Équipe", bon["equipe"] or "", "Ressource", bon["resource"] or ""],
-            ["Destination", bon["destination"] or "", "Client", bon["client"]],
-        ]
-
-    table = doc.add_table(rows=len(rows), cols=4)
-    table.style = "Table Grid"
-    for r, row in enumerate(rows):
-        for c, value in enumerate(row):
-            table.cell(r, c).text = str(value)
-
-    doc.add_paragraph()
-    items_table = doc.add_table(rows=1, cols=4)
-    items_table.style = "Table Grid"
-    headers = ["Référence", "Désignation", "Qté", "Remarque"]
-    for c, h in enumerate(headers):
-        items_table.cell(0, c).text = h
-
-    for item in items:
-        cells = items_table.add_row().cells
-        cells[0].text = item["reference"] or ""
-        cells[1].text = item["article"]
-        cells[2].text = str(item["quantity"])
-        cells[3].text = item["remarque"] or ""
-
-    doc.add_paragraph(
-        f"Saisie le {bon['datetime_saisie']} par {bon['created_by']}"
-    )
-
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
-# =========================================================
-# AUTHENTIFICATION
-# =========================================================
+# ---------------------------------------------------------
+# INITIALISATION DU SESSION STATE
+# ---------------------------------------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
 if "selected_client" not in st.session_state:
     st.session_state.selected_client = None
+
+# Base de données utilisateurs par défaut
+if "users_db" not in st.session_state:
+    st.session_state.users_db = {
+        "admin": {
+            "password": "admin123",
+            "name": "Administrateur",
+            "role": "admin",
+            "last_login": "Jamais",
+        },
+        "magasinier": {
+            "password": "123",
+            "name": "Magasinier Principal",
+            "role": "magasinier",
+            "last_login": "Jamais",
+        },
+        "coord1": {
+            "password": "123",
+            "name": "Coordinateur Projet",
+            "role": "coordinateur",
+            "last_login": "Jamais",
+        },
+    }
+
+# Configuration globale des référentiels (Gestion Admin)
+if "config" not in st.session_state:
+    st.session_state.config = {
+        "articles": [
+            "câble IF",
+            "câble RJ45",
+            "support 0.3 m",
+            "support 0.6 m",
+        ],
+        "fournisseurs": ["NEC", "ZTE", "Intégral", "FO connect"],
+        "equipes": ["Nabil Team", "Yassine Team", "Issam Team"],
+    }
+
+# Stock par article (Initialisation)
+if "stock_db" not in st.session_state:
+    st.session_state.stock_db = {
+        "câble IF": 100,
+        "câble RJ45": 250,
+        "support 0.3 m": 40,
+        "support 0.6 m": 25,
+    }
+
+# Suivi des ajustements manuels par l'admin
+if "manual_adjustments" not in st.session_state:
+    st.session_state.manual_adjustments = {
+        "câble IF": 0,
+        "câble RJ45": 0,
+        "support 0.3 m": 0,
+        "support 0.6 m": 0,
+    }
+
+# Registres des Bons (BE et BS)
+if "be_list" not in st.session_state:
+    st.session_state.be_list = []
+if "bs_list" not in st.session_state:
+    st.session_state.bs_list = []
+
+# Paniers temporaires de saisie multi-articles
 if "temp_be_items" not in st.session_state:
     st.session_state.temp_be_items = []
 if "temp_bs_items" not in st.session_state:
     st.session_state.temp_bs_items = []
 
-
-def login_screen():
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    left, center, right = st.columns([1, 2, 1])
-
-    with center:
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
-
-        c1, c2 = st.columns([1, 3])
-        with c1:
-            if os.path.exists("Logo Nomatis.jpg"):
-                st.image("Logo Nomatis.jpg", width=80)
-
-        with c2:
-            st.markdown(
-                '<div class="main-title">Gestion Stock MW NOMATIS</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                '<div class="subtitle">Gestion des entrées, sorties et stock MW</div>',
-                unsafe_allow_html=True,
-            )
-
-        st.divider()
-
-        username = st.text_input("Nom d'utilisateur", key="login_user")
-        password = st.text_input("Mot de passe", type="password", key="login_password")
-
-        st.markdown('<div class="login-btn">', unsafe_allow_html=True)
-        connect = st.button("SE CONNECTER", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        if connect:
-            user = user_info(username)
-            if user and user["password"] == password:
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                execute("UPDATE users SET last_login=? WHERE username=?", (now, username))
-                st.session_state.logged_in = True
-                st.session_state.current_user = username
-                st.success("Accès validé ✓")
-                st.rerun()
-            else:
-                st.error("Nom d'utilisateur ou mot de passe incorrect.")
-
-        st.markdown("</div>", unsafe_allow_html=True)
+CLIENTS_INFO = {
+    "Orange": {"logo": "Orange_logo.svg.webp", "color": "#FF6600"},
+    "Inwi": {"logo": "Logo INWI.jpg", "color": "#A1006B"},
+    "ZTE": {"logo": "Logo ZTE.jpg", "color": "#005BAC"},
+}
 
 
+# ---------------------------------------------------------
+# FONCTION DE GÉNÉRATION HTML POUR BE (MODELE EXACT EXCEL)
+# ---------------------------------------------------------
+def generate_be_html(be_data, client_logo_path):
+    nomatis_logo_b64 = ""
+    if os.path.exists("Logo Nomatis.jpg"):
+        with open("Logo Nomatis.jpg", "rb") as f:
+            nomatis_logo_b64 = base64.b64encode(f.read()).decode()
+
+    client_logo_b64 = ""
+    if os.path.exists(client_logo_path):
+        with open(client_logo_path, "rb") as f:
+            client_logo_b64 = base64.b64encode(f.read()).decode()
+
+    items_rows = ""
+    for item in be_data["items"]:
+        items_rows += f"""
+        <tr>
+            <td style="border: 2px solid black; padding: 8px;">{item.get('Référence', '-')}</td>
+            <td style="border: 2px solid black; padding: 8px; text-align: left;">{item.get('Article', '')}</td>
+            <td style="border: 2px solid black; padding: 8px; text-align: center;">{item.get('Quantité', 0)}</td>
+        </tr>
+        """
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 30px; color: #000; background-color: #fff; }}
+            .header-table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; }}
+            .address {{ font-size: 13px; line-height: 1.4; margin-top: 5px; }}
+            .title {{ text-align: center; font-size: 24px; font-weight: bold; margin: 25px 0; }}
+            .info-table, .items-table {{ width: 100%; border-collapse: collapse; text-align: center; }}
+            .info-table th, .info-table td, .items-table th, .items-table td {{
+                border: 2px solid black;
+                padding: 8px;
+                font-size: 13px;
+            }}
+            .info-table th, .items-table th {{ background-color: #f2f2f2; font-weight: bold; }}
+            .items-table {{ margin-top: 20px; }}
+        </style>
+    </head>
+    <body>
+
+        <table class="header-table">
+            <tr>
+                <td style="width: 50%; vertical-align: top;">
+                    {f'<img src="data:image/jpeg;base64,{nomatis_logo_b64}" height="55">' if nomatis_logo_b64 else '<h2>NOMATIS</h2>'}
+                    <div class="address">
+                        <strong>NOMATIS</strong><br>
+                        32 Rue Al Hatim<br>
+                        les Orangers<br>
+                        10000
+                    </div>
+                </td>
+                <td style="width: 50%; text-align: right; vertical-align: top;">
+                    {f'<img src="data:image/jpeg;base64,{client_logo_b64}" height="55">' if client_logo_b64 else '<h2>LOGO CLIENT</h2>'}
+                </td>
+            </tr>
+        </table>
+
+        <div class="title">Bon d'entree</div>
+
+        <table class="info-table">
+            <thead>
+                <tr>
+                    <th>Bon de Livraison</th>
+                    <th>Date</th>
+                    <th>Fournisseur</th>
+                    <th>Lieu de livraison</th>
+                    <th>receptioné par</th>
+                    <th>Stock</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{be_data.get('id', '')}</td>
+                    <td>{be_data.get('date_be', '')}</td>
+                    <td>{be_data.get('fournisseur', '')}</td>
+                    <td>{be_data.get('lieu_livraison', '')}</td>
+                    <td>{be_data.get('receptionne_par', '')}</td>
+                    <td>{be_data.get('client', '')}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Référence</th>
+                    <th style="width: 60%;">Désignation</th>
+                    <th style="width: 15%;">Qté</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_rows}
+            </tbody>
+        </table>
+
+    </body>
+    </html>
+    """
+
+
+# =========================================================
+# ÉCRAN DE CONNEXION (PAGE 1 : BLEU, BLANC, TOUCHES DE VERT)
+# =========================================================
 if not st.session_state.logged_in:
-    login_screen()
+    st.markdown(
+        """
+    <style>
+        .stApp {
+            background-color: #0d1b2a;
+            color: #ffffff;
+        }
+        h1, h2, h3, h4, label {
+            color: #ffffff !important;
+        }
+        .login-card {
+            background-color: #1b263b;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #415a77;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+        }
+        .btn-red button {
+            background-color: #d90429 !important;
+            color: #ffffff !important;
+            border: none !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+            border-radius: 6px !important;
+            padding: 10px !important;
+        }
+        .btn-green button {
+            background-color: #2ec4b6 !important;
+            color: #ffffff !important;
+            border: none !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+            border-radius: 6px !important;
+            padding: 10px !important;
+        }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
+
+    with c2:
+        with st.container():
+            st.markdown('<div class="login-card">', unsafe_allow_html=True)
+            col_img, col_txt = st.columns([1, 3])
+            with col_img:
+                if os.path.exists("Logo Nomatis.jpg"):
+                    st.image("Logo Nomatis.jpg", width=90)
+                else:
+                    st.markdown("## [LOGO]")
+            with col_txt:
+                st.markdown(
+                    "<h2 style='margin-top:10px; color:#2ec4b6 !important;'>Gestion Stock MW NOMATIS</h2>",
+                    unsafe_allow_html=True,
+                )
+
+            st.write("---")
+            username_input = st.text_input("Nom d'utilisateur", key="user_in")
+            password_input = st.text_input(
+                "Mot de passe", type="password", key="pass_in"
+            )
+
+            # Bouton dynamically styled (Rouge par défaut)
+            st.markdown('<div class="btn-red">', unsafe_allow_html=True)
+            login_clicked = st.button("SE CONNECTER", use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if login_clicked:
+                if (
+                    username_input in st.session_state.users_db
+                    and st.session_state.users_db[username_input]["password"]
+                    == password_input
+                ):
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = username_input
+                    st.session_state.users_db[username_input][
+                        "last_login"
+                    ] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    # Changement visuel dynamique en vert
+                    st.markdown(
+                        """
+                    <style>
+                        .btn-red button { background-color: #2ec4b6 !important; }
+                    </style>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+                    st.success("Accès validé ! Redirection...")
+                    st.rerun()
+                else:
+                    st.error("Identifiants incorrects. Veuillez réessayer.")
+
+            st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 
-CURRENT_USER = user_info(st.session_state.current_user)
-ROLE = CURRENT_USER["role"]
-
-
 # =========================================================
-# SÉLECTION CLIENT
+# APPLICATION PRINCIPALE APPRÈS CONNEXION
 # =========================================================
-def client_selection():
+current_user_info = st.session_state.users_db[st.session_state.current_user]
+user_role = current_user_info["role"]
+
+# ---------------------------------------------------------
+# ÉCRAN DE SÉLECTION DU CLIENT (THÈME BLANC / ÉCRITURE NOIRE)
+# ---------------------------------------------------------
+if not st.session_state.selected_client:
     st.markdown(
-        '<div class="main-title">Gestion Stock MW NOMATIS</div>',
+        """
+    <style>
+        .stApp {
+            background-color: #ffffff;
+            color: #000000;
+        }
+        h1, h2, h3, h4, h5, h6, label, p, span, div {
+            color: #000000 !important;
+        }
+        .client-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            background-color: #f9f9f9;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .btn-client-stock button {
+            background-color: #0056b3 !important;
+            color: #ffffff !important;
+            font-weight: bold !important;
+            border: none !important;
+            border-radius: 5px !important;
+            font-size: 15px !important;
+            padding: 8px 16px !important;
+        }
+        .btn-client-stock button:hover {
+            background-color: #003d82 !important;
+            color: #ffffff !important;
+        }
+    </style>
+    """,
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<div class="subtitle">Sélectionnez l’espace client</div>',
-        unsafe_allow_html=True,
-    )
+
+    # En-tête haut de page
+    c_head1, c_head2 = st.columns([3, 1])
+    with c_head1:
+        st.title("Gestion Stock MW NOMATIS")
+        st.write(
+            f"Bienvenue, **{current_user_info['name']}** ({user_role.upper()})"
+        )
+    with c_head2:
+        if st.button("🚪 Déconnexion", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.selected_client = None
+            st.rerun()
+
     st.divider()
+    st.subheader("Sélectionnez l'espace client :")
 
-    cols = st.columns(3)
+    cols_clients = st.columns(3)
+    for idx, (client_name, info) in enumerate(CLIENTS_INFO.items()):
+        with cols_clients[idx]:
+            st.markdown('<div class="client-card">', unsafe_allow_html=True)
 
-    for idx, (client, info) in enumerate(CLIENTS.items()):
-        with cols[idx]:
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            logo = normalized_logo(info["logo"], (300, 150))
-            if logo:
-                st.image(logo, use_container_width=True)
+            # Logo client uniforme
+            if os.path.exists(info["logo"]):
+                st.image(info["logo"], height=100)
             else:
                 st.markdown(
-                    f"<h2 style='text-align:center'>{client}</h2>",
+                    f"<h2 style='height:100px; line-height:100px;'>{client_name}</h2>",
                     unsafe_allow_html=True,
                 )
 
             st.markdown(
-                f"<h3 style='text-align:center;color:{info['color']}'>{client}</h3>",
+                f"<h3 style='color:{info['color']} !important;'>{client_name}</h3>",
                 unsafe_allow_html=True,
             )
 
-            st.markdown('<div class="stock-btn">', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="btn-client-stock">', unsafe_allow_html=True
+            )
             if st.button(
-                "ACCÉDER AU STOCK",
-                key=f"client_{client}",
+                "Accéder au stock",
+                key=f"btn_acc_{client_name}",
                 use_container_width=True,
             ):
-                st.session_state.selected_client = client
-                st.session_state.temp_be_items = []
-                st.session_state.temp_bs_items = []
+                st.session_state.selected_client = client_name
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
 
-    # Gestion des utilisateurs ADMIN
-    if ROLE == "admin":
-        admin_users_management()
-    else:
-        profile_management()
+    # ---------------------------------------------------------
+    # GESTION DES UTILISATEURS (SUR LA PAGE CLIENT)
+    # ---------------------------------------------------------
+    if user_role == "admin":
+        st.subheader("🛠️ Gestion des Utilisateurs (Administrateur)")
+        tab_u_create, tab_u_manage = st.tabs(
+            ["Créer un utilisateur", "Liste & Modifications"]
+        )
 
-
-def profile_management():
-    st.subheader("👤 Mon compte")
-    with st.form("profile_form"):
-        new_name = st.text_input("Nom complet", value=CURRENT_USER["fullname"])
-        new_password = st.text_input("Nouveau mot de passe", value=CURRENT_USER["password"], type="password")
-
-        if st.form_submit_button("Enregistrer les modifications"):
-            if not new_name.strip() or not new_password:
-                st.error("Le nom et le mot de passe sont obligatoires.")
-            else:
-                execute(
-                    "UPDATE users SET fullname=?, password=? WHERE username=?",
-                    (new_name.strip(), new_password, st.session_state.current_user),
-                )
-                st.success("Votre compte a été mis à jour.")
-                st.rerun()
-
-
-def admin_users_management():
-    st.subheader("🛠️ Administration des utilisateurs")
-    tab_create, tab_edit = st.tabs(["Créer un utilisateur", "Modifier un utilisateur"])
-
-    with tab_create:
-        with st.form("create_user_form"):
-            username = st.text_input("Identifiant")
-            fullname = st.text_input("Nom complet")
-            password = st.text_input("Mot de passe", type="password")
-            role = st.selectbox("Rôle", ROLES)
-
-            if st.form_submit_button("Créer l'utilisateur"):
-                if not username.strip() or not fullname.strip() or not password:
-                    st.error("Tous les champs sont obligatoires.")
-                elif user_info(username.strip()):
-                    st.error("Cet identifiant existe déjà.")
-                else:
-                    execute(
-                        "INSERT INTO users(username,password,fullname,role,last_login) VALUES(?,?,?,?,?)",
-                        (username.strip(), password, fullname.strip(), role, "Jamais"),
+        with tab_u_create:
+            with st.form("form_create_user"):
+                c_u1, c_u2 = st.columns(2)
+                with c_u1:
+                    new_u_id = st.text_input("Identifiant (login)")
+                    new_u_name = st.text_input("Nom complet")
+                with c_u2:
+                    new_u_pass = st.text_input(
+                        "Mot de passe", type="password"
                     )
-                    st.success("Utilisateur créé avec succès.")
+                    new_u_role = st.selectbox(
+                        "Rôle",
+                        ["admin", "magasinier", "coordinateur", "coordinatrice"],
+                    )
+
+                if st.form_submit_button("➕ Enregistrer le nouvel utilisateur"):
+                    if new_u_id and new_u_pass and new_u_name:
+                        if new_u_id not in st.session_state.users_db:
+                            st.session_state.users_db[new_u_id] = {
+                                "password": new_u_pass,
+                                "name": new_u_name,
+                                "role": new_u_role,
+                                "last_login": "Jamais",
+                            }
+                            st.success(
+                                f"Compte '{new_u_id}' créé avec succès !"
+                            )
+                            st.rerun()
+                        else:
+                            st.error("Cet identifiant existe déjà.")
+                    else:
+                        st.error("Veuillez remplir tous les champs.")
+
+        with tab_u_manage:
+            u_table_data = []
+            for u_key, u_val in st.session_state.users_db.items():
+                u_table_data.append(
+                    {
+                        "Identifiant": u_key,
+                        "Nom Complet": u_val["name"],
+                        "Rôle": u_val["role"],
+                        "Dernière Connexion": u_val.get(
+                            "last_login", "Jamais"
+                        ),
+                    }
+                )
+            st.dataframe(pd.DataFrame(u_table_data), use_container_width=True)
+
+            st.write("---")
+            st.write("##### Modifier un compte existant")
+            target_user = st.selectbox(
+                "Sélectionner l'utilisateur à modifier",
+                list(st.session_state.users_db.keys()),
+            )
+            selected_u_data = st.session_state.users_db[target_user]
+
+            with st.form("form_edit_user"):
+                edit_name = st.text_input(
+                    "Nom complet", value=selected_u_data["name"]
+                )
+                edit_pass = st.text_input(
+                    "Mot de passe", value=selected_u_data["password"]
+                )
+                edit_role = st.selectbox(
+                    "Rôle",
+                    ["admin", "magasinier", "coordinateur", "coordinatrice"],
+                    index=[
+                        "admin",
+                        "magasinier",
+                        "coordinateur",
+                        "coordinatrice",
+                    ].index(selected_u_data["role"]),
+                )
+
+                if st.form_submit_button("💾 Mettre à jour"):
+                    st.session_state.users_db[target_user]["name"] = edit_name
+                    st.session_state.users_db[target_user][
+                        "password"
+                    ] = edit_pass
+                    st.session_state.users_db[target_user]["role"] = edit_role
+                    st.success("Utilisateur mis à jour avec succès !")
                     st.rerun()
 
-    with tab_edit:
-        users = query(
-            "SELECT username,fullname,role,last_login FROM users ORDER BY username"
-        )
-        if users:
-            st.dataframe(
-                pd.DataFrame([dict(u) for u in users]),
-                use_container_width=True,
-                hide_index=True,
+    else:
+        # Modification de son propre compte pour autres rôles
+        st.subheader("⚙️ Mon Compte Utilisateur")
+        with st.form("form_self_edit"):
+            self_name = st.text_input(
+                "Nom complet", value=current_user_info["name"]
+            )
+            self_pass = st.text_input(
+                "Mot de passe", value=current_user_info["password"]
             )
 
-            usernames = [u["username"] for u in users]
-            selected = st.selectbox("Utilisateur à modifier", usernames)
-            selected_user = user_info(selected)
+            if st.form_submit_button("💾 Mettre à jour mes informations"):
+                st.session_state.users_db[st.session_state.current_user][
+                    "name"
+                ] = self_name
+                st.session_state.users_db[st.session_state.current_user][
+                    "password"
+                ] = self_pass
+                st.success("Profil mis à jour !")
+                st.rerun()
 
-            with st.form("edit_user_form"):
-                fullname = st.text_input("Nom", value=selected_user["fullname"])
-                password = st.text_input(
-                    "Mot de passe",
-                    value=selected_user["password"],
-                    type="password",
-                )
-                role = st.selectbox(
-                    "Rôle",
-                    ROLES,
-                    index=ROLES.index(selected_user["role"]),
-                )
-
-                if st.form_submit_button("Mettre à jour"):
-                    execute(
-                        "UPDATE users SET fullname=?,password=?,role=? WHERE username=?",
-                        (fullname.strip(), password, role, selected),
-                    )
-                    st.success("Utilisateur mis à jour.")
-                    st.rerun()
-
-
-if not st.session_state.selected_client:
-    client_selection()
     st.stop()
 
 
-CLIENT = st.session_state.selected_client
+# ---------------------------------------------------------
+# DÉFINITION DU THÈME POUR LES 5 RUBRIQUES ESPACE CLIENT
+# ---------------------------------------------------------
+st.markdown(
+    """
+<style>
+    .stApp {
+        background-color: #0f172a;
+        color: #f8fafc;
+    }
+    h1, h2, h3, h4, h5, h6, label, p, span {
+        color: #f8fafc !important;
+    }
+    .stButton>button {
+        border-radius: 6px;
+        font-weight: bold;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
-# =========================================================
-# HEADER APPLICATION
-# =========================================================
-head1, head2, head3 = st.columns([2, 4, 2])
-
-with head1:
+# En-tête Espace Client
+c_top1, c_top2, c_top3 = st.columns([2, 3, 2])
+with c_top1:
     if os.path.exists("Logo Nomatis.jpg"):
-        st.image("Logo Nomatis.jpg", width=90)
-
-with head2:
-    st.markdown(
-        '<div class="main-title">Gestion Stock MW NOMATIS</div>',
-        unsafe_allow_html=True,
+        st.image("Logo Nomatis.jpg", width=110)
+with c_top2:
+    st.title(f"Client : {st.session_state.selected_client}")
+with c_top3:
+    st.write(
+        f"👤 **{current_user_info['name']}** ({user_role.upper()})"
     )
-    st.caption(f"Espace client : {CLIENT}")
-
-with head3:
-    st.write(f"👤 {CURRENT_USER['fullname']}")
-    st.caption(f"Rôle : {ROLE}")
-
-    if st.button("🚪 Déconnexion", use_container_width=True):
-        st.session_state.logged_in = False
-        st.session_state.current_user = None
-        st.session_state.selected_client = None
-        st.session_state.temp_be_items = []
-        st.session_state.temp_bs_items = []
-        st.rerun()
+    c_sub1, c_sub2 = st.columns(2)
+    with c_sub1:
+        if st.button("🔄 Changer Client", use_container_width=True):
+            st.session_state.selected_client = None
+            st.rerun()
+    with c_sub2:
+        if st.button("🚪 Déconnexion", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.selected_client = None
+            st.rerun()
 
 st.divider()
 
-# Compte utilisateur accessible à tout moment
-with st.expander("👤 Modifier mon compte"):
-    with st.form("account_edit_anywhere"):
-        account_name = st.text_input("Nom complet", value=CURRENT_USER["fullname"])
-        account_password = st.text_input(
-            "Mot de passe", value=CURRENT_USER["password"], type="password"
-        )
-        if st.form_submit_button("Enregistrer mon compte"):
-            if not account_name.strip() or not account_password:
-                st.error("Le nom et le mot de passe sont obligatoires.")
-            else:
-                execute(
-                    "UPDATE users SET fullname=?, password=? WHERE username=?",
-                    (account_name.strip(), account_password, st.session_state.current_user),
-                )
-                st.success("Compte mis à jour avec succès.")
-                st.rerun()
-
+# LES 5 RUBRIQUES
+t_be, t_bs, t_stock, t_mods, t_config = st.tabs(
+    [
+        "📥 BE (Bon d'Entrée)",
+        "📤 BS (Bon de Sortie)",
+        "📊 Situation Stock",
+        "✏️ Modification & Impression",
+        "⚙️ Configuration",
+    ]
+)
 
 # =========================================================
-# 5 RUBRIQUES
-# =========================================================
-tab_names = [
-    "📥 BE",
-    "📤 BS",
-    "📊 Situation Stock",
-    "✏️ Modification & Impression",
-    "⚙️ Configuration",
-]
-t_be, t_bs, t_stock, t_mods, t_config = st.tabs(tab_names)
-
-
-# =========================================================
-# BE
+# RUBRIQUE 1 : BON D'ENTRÉE (BE)
 # =========================================================
 with t_be:
-    if not can(ROLE, "be"):
-        st.info("Votre rôle ne permet pas de créer ou modifier un Bon d'Entrée.")
+    st.subheader("Saisie d'un Bon d'Entrée (BE)")
+
+    if user_role in ["coordinateur", "coordinatrice"]:
+        st.warning(
+            "🔒 Votre rôle ne vous permet pas de créer des Bons d'Entrée (Consultation et Impression uniquement)."
+        )
     else:
-        st.subheader("Bon d'Entrée")
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
+        c_be1, c_be2, c_be3 = st.columns(3)
+        with c_be1:
+            dt_auto = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.text_input(
-                "Date / heure de saisie",
-                value=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                disabled=True,
+                "Date et Heure de Saisie (Auto)", value=dt_auto, disabled=True
             )
-        with c2:
+        with c_be2:
             date_be = st.date_input(
-                "Date du BE *",
-                value=date.today(),
-                max_value=date.today(),
-                key="be_date",
+                "Date du BE", max_value=date.today(), key="be_date_input"
             )
-        with c3:
-            next_be = query(
-                "SELECT COUNT(*) AS n FROM bons WHERE type='BE' AND client=?",
-                (CLIENT,),
-                one=True,
-            )["n"] + 1
-            num_be = st.text_input("N° BE *", value=f"BE-{date.today().strftime('%Y%m%d')}-{next_be:04d}")
+        with c_be3:
+            num_be = st.text_input(
+                "Numéro de BE", value=f"BE-{len(st.session_state.be_list)+1:04d}"
+            )
 
-        c4, c5, c6 = st.columns(3)
-        with c4:
-            suppliers = active_names("fournisseurs")
-            supplier_options = suppliers + ["Autre (saisie manuelle)"]
-            supplier_choice = st.selectbox("Fournisseur *", supplier_options)
-            if supplier_choice == "Autre (saisie manuelle)":
-                fournisseur = st.text_input("Nouveau fournisseur *")
-            else:
-                fournisseur = supplier_choice
-        with c5:
-            lieu = st.text_input("Lieu de livraison *", value="Magasin Principal")
-        with c6:
-            reception = st.text_input(
-                "Réceptionné par",
-                value=CURRENT_USER["fullname"],
+        c_be4, c_be5, c_be6 = st.columns(3)
+        with c_be4:
+            f_options = st.session_state.config["fournisseurs"] + [
+                "Autre (Saisir)"
+            ]
+            sel_f = st.selectbox("Fournisseur", f_options)
+            fournisseur_val = (
+                st.text_input("Préciser Fournisseur")
+                if sel_f == "Autre (Saisir)"
+                else sel_f
+            )
+        with c_be5:
+            lieu_liv = st.text_input(
+                "Lieu de livraison", value="Magasin Principal"
+            )
+        with c_be6:
+            st.text_input(
+                "Réceptionné par (Auto)",
+                value=current_user_info["name"],
                 disabled=True,
             )
 
-        st.markdown("##### Articles du Bon d'Entrée")
-        refs, arts, qtys, rems = st.columns([2, 4, 2, 3])
+        st.write("---")
+        st.write("##### Saisie des articles :")
 
-        with refs:
-            ref = st.text_input("Référence")
-        with arts:
-            article_names = active_names("articles")
-            if article_names:
-                article = st.selectbox("Article *", article_names, key="be_article")
-            else:
-                article = None
-                st.warning("Aucun article configuré.")
-        with qtys:
-            qty = st.number_input("Quantité *", min_value=1, step=1, value=1, key="be_qty")
-        with rems:
-            remarque = st.text_input("Remarque", key="be_rem")
+        col_ref, col_art, col_qte, col_rem = st.columns([2, 3, 2, 3])
+        with col_ref:
+            ref_i = st.text_input("Référence", key="be_ref_in")
+        with col_art:
+            art_i = st.selectbox(
+                "Article (Liste prédéfinie)",
+                st.session_state.config["articles"],
+                key="be_art_in",
+            )
+        with col_qte:
+            qte_i = st.number_input(
+                "Quantité (> 0)", min_value=1, step=1, key="be_qte_in"
+            )
+        with col_rem:
+            rem_i = st.text_input("Remarque", key="be_rem_in")
 
-        if st.button("➕ Ajouter l'article au BE", key="add_be"):
-            if not article:
-                st.error("Sélectionnez un article.")
-            elif qty <= 0:
+        if st.button("➕ Ajouter l'article au bon"):
+            if qte_i <= 0:
                 st.error("La quantité doit être supérieure à 0.")
             else:
-                st.session_state.temp_be_items.append(
-                    {
-                        "Référence": ref.strip(),
-                        "Article": article,
-                        "Quantité": int(qty),
-                        "Remarque": remarque.strip(),
-                    }
-                )
-                st.success("Article ajouté au BE.")
+                # Vérification doublon d'article : faire la somme
+                found = False
+                for item in st.session_state.temp_be_items:
+                    if item["Article"] == art_i:
+                        item["Quantité"] += qte_i
+                        item["Remarque"] += f" | {rem_i}" if rem_i else ""
+                        found = True
+                        break
+                if not found:
+                    st.session_state.temp_be_items.append(
+                        {
+                            "Référence": ref_i,
+                            "Article": art_i,
+                            "Quantité": qte_i,
+                            "Remarque": rem_i,
+                        }
+                    )
+                st.success(f"Article {art_i} ajouté au bon.")
 
         if st.session_state.temp_be_items:
-            st.markdown("##### Aperçu du BE")
+            st.write("##### Tableau des articles du Bon :")
             st.dataframe(
                 pd.DataFrame(st.session_state.temp_be_items),
                 use_container_width=True,
-                hide_index=True,
             )
 
-            if st.button("🗑️ Vider les articles du BE", key="clear_be"):
-                st.session_state.temp_be_items = []
-                st.rerun()
+            c_save_be, c_clr_be = st.columns([2, 1])
+            with c_save_be:
+                if st.button("💾 Enregistrer le Bon d'Entrée", use_container_width=True):
+                    be_record = {
+                        "id": num_be,
+                        "datetime_saisie": dt_auto,
+                        "date_be": str(date_be),
+                        "fournisseur": fournisseur_val,
+                        "lieu_livraison": lieu_liv,
+                        "receptionne_par": current_user_info["name"],
+                        "items": st.session_state.temp_be_items.copy(),
+                        "client": st.session_state.selected_client,
+                    }
 
-            if st.button("💾 Enregistrer le Bon d'Entrée", key="save_be"):
-                if not num_be.strip() or not fournisseur.strip() or not lieu.strip():
-                    st.error("N° BE, fournisseur et lieu de livraison sont obligatoires.")
-                elif not st.session_state.temp_be_items:
-                    st.error("Ajoutez au moins un article.")
-                elif query(
-                    "SELECT id FROM bons WHERE type='BE' AND number=? AND client=?",
-                    (num_be.strip(), CLIENT),
-                    one=True,
-                ):
-                    st.error("Ce numéro de BE existe déjà pour ce client.")
-                else:
-                    bon_id = execute(
-                        """
-                        INSERT INTO bons
-                        (type,number,client,date_bon,datetime_saisie,fournisseur,lieu_livraison,
-                         receptionne_par,created_by)
-                        VALUES(?,?,?,?,?,?,?,?,?)
-                        """,
-                        (
-                            "BE",
-                            num_be.strip(),
-                            CLIENT,
-                            str(date_be),
-                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            fournisseur.strip(),
-                            lieu.strip(),
-                            CURRENT_USER["fullname"],
-                            st.session_state.current_user,
-                        ),
-                    )
-
-                    for item in st.session_state.temp_be_items:
-                        aid = article_id_by_name(item["Article"])
-                        execute(
-                            """
-                            INSERT INTO bon_items
-                            (bon_id,article_id,reference,quantity,remarque)
-                            VALUES(?,?,?,?,?)
-                            """,
-                            (
-                                bon_id,
-                                aid,
-                                item["Référence"],
-                                item["Quantité"],
-                                item["Remarque"],
-                            ),
-                        )
-                        old = current_stock(CLIENT, aid)
-                        set_stock(CLIENT, aid, old + item["Quantité"])
-                        add_movement(
-                            CLIENT,
-                            aid,
-                            "BE",
-                            item["Quantité"],
-                            num_be.strip(),
-                            st.session_state.current_user,
-                            item["Remarque"],
+                    # Mise à jour du stock
+                    for it in st.session_state.temp_be_items:
+                        st.session_state.stock_db[it["Article"]] = (
+                            st.session_state.stock_db.get(it["Article"], 0)
+                            + it["Quantité"]
                         )
 
+                    st.session_state.be_list.append(be_record)
                     st.session_state.temp_be_items = []
-                    st.session_state["last_saved_bon"] = bon_id
-                    st.success(f"Bon d'Entrée {num_be} enregistré avec succès.")
+                    st.success(f"Bon d'Entrée {num_be} enregistré !")
+                    st.rerun()
+
+            with c_clr_be:
+                if st.button("🗑️ Vider la liste", use_container_width=True):
+                    st.session_state.temp_be_items = []
                     st.rerun()
 
 
 # =========================================================
-# BS
+# RUBRIQUE 2 : BON DE SORTIE (BS)
 # =========================================================
 with t_bs:
-    if not can(ROLE, "bs"):
-        st.info("Votre rôle ne permet pas de créer ou modifier un Bon de Sortie.")
+    st.subheader("Saisie d'un Bon de Sortie (BS)")
+
+    if user_role in ["coordinateur", "coordinatrice"]:
+        st.warning(
+            "🔒 Votre rôle ne vous permet pas de créer des Bons de Sortie (Consultation et Impression uniquement)."
+        )
     else:
-        st.subheader("Bon de Sortie")
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
+        c_bs1, c_bs2, c_bs3 = st.columns(3)
+        with c_bs1:
+            dt_bs_auto = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.text_input(
-                "Date / heure de saisie",
-                value=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Date et Heure de Saisie (Auto)",
+                value=dt_bs_auto,
                 disabled=True,
-                key="bs_datetime",
+                key="bs_dt_auto",
             )
-        with c2:
+        with c_bs2:
             date_bs = st.date_input(
-                "Date du BS *",
-                value=date.today(),
-                max_value=date.today(),
-                key="bs_date",
+                "Date du BS", max_value=date.today(), key="bs_date_input"
             )
-        with c3:
-            next_bs = query(
-                "SELECT COUNT(*) AS n FROM bons WHERE type='BS' AND client=?",
-                (CLIENT,),
-                one=True,
-            )["n"] + 1
+        with c_bs3:
             num_bs = st.text_input(
-                "N° BS *",
-                value=f"BS-{date.today().strftime('%Y%m%d')}-{next_bs:04d}",
+                "Numéro de BS", value=f"BS-{len(st.session_state.bs_list)+1:04d}"
             )
 
-        c4, c5, c6 = st.columns(3)
-        with c4:
-            teams = active_names("equipes")
-            equipe = st.selectbox("Équipe réceptrice *", teams) if teams else ""
-        with c5:
-            resources = active_names("resources")
-            resource = st.selectbox("Ressource projet", [""] + resources)
-        with c6:
-            destination = st.text_input("Destination / Projet *")
-
-        st.markdown("##### Articles à sortir")
-        arts, qtys, rems = st.columns([4, 2, 4])
-
-        with arts:
-            article_names = active_names("articles")
-            article = st.selectbox("Article *", article_names, key="bs_article") if article_names else None
-
-        with qtys:
-            available = current_stock(CLIENT, article_id_by_name(article)) if article else 0
-            st.caption(f"Stock disponible : **{available}**")
-            qty = st.number_input(
-                "Quantité *",
-                min_value=1,
-                max_value=max(1, available),
-                value=1,
-                step=1,
-                key="bs_qty",
+        c_bs4, c_bs5 = st.columns(2)
+        with c_bs4:
+            eq_sel = st.selectbox(
+                "Équipe réceptrice", st.session_state.config["equipes"]
             )
+        with c_bs5:
+            dest_bs = st.text_input("Destination / Projet")
 
-        with rems:
-            remarque = st.text_input("Remarque", key="bs_rem")
+        st.write("---")
+        st.write("##### Saisie des articles à sortir :")
 
-        if st.button("➕ Ajouter l'article au BS", key="add_bs"):
-            if not article:
-                st.error("Sélectionnez un article.")
-            elif available <= 0:
-                st.error("Cet article n'est pas disponible en stock.")
-            elif qty <= 0:
+        col_bs_art, col_bs_qte, col_bs_rem = st.columns([3, 2, 3])
+        with col_bs_art:
+            art_bs_sel = st.selectbox(
+                "Article", st.session_state.config["articles"], key="bs_art_sel"
+            )
+        with col_bs_qte:
+            stk_dispo = st.session_state.stock_db.get(art_bs_sel, 0)
+            st.caption(f"Stock disponible : **{stk_dispo}**")
+            qte_bs_sel = st.number_input(
+                "Quantité à sortir", min_value=1, step=1, key="bs_qte_sel"
+            )
+        with col_bs_rem:
+            rem_bs_sel = st.text_input("Remarque", key="bs_rem_sel")
+
+        if st.button("➕ Ajouter l'article à la sortie"):
+            if qte_bs_sel <= 0:
                 st.error("La quantité doit être supérieure à 0.")
-            elif qty > available:
-                st.error("La quantité dépasse le stock disponible.")
-            else:
-                # Empêche de dépasser le stock avec plusieurs lignes du même article
-                already = sum(
-                    x["Quantité"]
-                    for x in st.session_state.temp_bs_items
-                    if x["Article"] == article
+            elif qte_bs_sel > stk_dispo:
+                st.error(
+                    f"Quantité insuffisante ! Stock disponible : {stk_dispo}"
                 )
-                if already + qty > available:
-                    st.error("La quantité cumulée de cet article dépasse le stock disponible.")
-                else:
+            else:
+                found = False
+                for item in st.session_state.temp_bs_items:
+                    if item["Article"] == art_bs_sel:
+                        if (item["Quantité"] + qte_bs_sel) > stk_dispo:
+                            st.error(
+                                "Le cumul dépasse le stock disponible !"
+                            )
+                            found = True
+                            break
+                        item["Quantité"] += qte_bs_sel
+                        item["Remarque"] += (
+                            f" | {rem_bs_sel}" if rem_bs_sel else ""
+                        )
+                        found = True
+                        break
+                if not found and qte_bs_sel <= stk_dispo:
                     st.session_state.temp_bs_items.append(
                         {
-                            "Article": article,
-                            "Quantité": int(qty),
-                            "Remarque": remarque.strip(),
+                            "Article": art_bs_sel,
+                            "Quantité": qte_bs_sel,
+                            "Remarque": rem_bs_sel,
                         }
                     )
-                    st.success("Article ajouté au BS.")
+                    st.success(f"Article {art_bs_sel} ajouté au bon.")
 
         if st.session_state.temp_bs_items:
-            st.markdown("##### Aperçu du BS")
+            st.write("##### Tableau des articles du Bon de Sortie :")
             st.dataframe(
                 pd.DataFrame(st.session_state.temp_bs_items),
                 use_container_width=True,
-                hide_index=True,
             )
 
-            if st.button("🗑️ Vider les articles du BS", key="clear_bs"):
-                st.session_state.temp_bs_items = []
-                st.rerun()
-
-            if st.button("💾 Enregistrer le Bon de Sortie", key="save_bs"):
-                if not num_bs.strip() or not destination.strip() or not equipe:
-                    st.error("N° BS, équipe et destination sont obligatoires.")
-                elif not st.session_state.temp_bs_items:
-                    st.error("Ajoutez au moins un article.")
-                elif query(
-                    "SELECT id FROM bons WHERE type='BS' AND number=? AND client=?",
-                    (num_bs.strip(), CLIENT),
-                    one=True,
-                ):
-                    st.error("Ce numéro de BS existe déjà pour ce client.")
-                else:
-                    # Vérification finale avant modification du stock
-                    errors = []
-                    for item in st.session_state.temp_bs_items:
-                        aid = article_id_by_name(item["Article"])
-                        if item["Quantité"] <= 0:
-                            errors.append(f"{item['Article']} : quantité invalide.")
-                        elif item["Quantité"] > current_stock(CLIENT, aid):
-                            errors.append(f"{item['Article']} : stock insuffisant.")
-
-                    if errors:
-                        for e in errors:
-                            st.error(e)
+            c_save_bs, c_clr_bs = st.columns([2, 1])
+            with c_save_bs:
+                if st.button("💾 Enregistrer le Bon de Sortie", use_container_width=True):
+                    if not dest_bs:
+                        st.error("Veuillez renseigner la destination.")
                     else:
-                        bon_id = execute(
-                            """
-                            INSERT INTO bons
-                            (type,number,client,date_bon,datetime_saisie,equipe,resource,
-                             destination,created_by)
-                            VALUES(?,?,?,?,?,?,?,?,?)
-                            """,
-                            (
-                                "BS",
-                                num_bs.strip(),
-                                CLIENT,
-                                str(date_bs),
-                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                equipe,
-                                resource,
-                                destination.strip(),
-                                st.session_state.current_user,
-                            ),
-                        )
+                        bs_record = {
+                            "id": num_bs,
+                            "datetime_saisie": dt_bs_auto,
+                            "date_bs": str(date_bs),
+                            "equipe": eq_sel,
+                            "destination": dest_bs,
+                            "items": st.session_state.temp_bs_items.copy(),
+                            "client": st.session_state.selected_client,
+                        }
 
-                        for item in st.session_state.temp_bs_items:
-                            aid = article_id_by_name(item["Article"])
-                            execute(
-                                """
-                                INSERT INTO bon_items
-                                (bon_id,article_id,reference,quantity,remarque)
-                                VALUES(?,?,?,?,?)
-                                """,
-                                (
-                                    bon_id,
-                                    aid,
-                                    "",
-                                    item["Quantité"],
-                                    item["Remarque"],
-                                ),
-                            )
-                            old = current_stock(CLIENT, aid)
-                            set_stock(CLIENT, aid, old - item["Quantité"])
-                            add_movement(
-                                CLIENT,
-                                aid,
-                                "BS",
-                                item["Quantité"],
-                                num_bs.strip(),
-                                st.session_state.current_user,
-                                item["Remarque"],
-                            )
+                        # Déduction du stock
+                        for it in st.session_state.temp_bs_items:
+                            st.session_state.stock_db[it["Article"]] -= it[
+                                "Quantité"
+                            ]
 
+                        st.session_state.bs_list.append(bs_record)
                         st.session_state.temp_bs_items = []
-                        st.session_state["last_saved_bon"] = bon_id
-                        st.success(f"Bon de Sortie {num_bs} enregistré avec succès.")
+                        st.success(f"Bon de Sortie {num_bs} enregistré !")
                         st.rerun()
 
+            with c_clr_bs:
+                if st.button("🗑️ Vider la liste BS", use_container_width=True):
+                    st.session_state.temp_bs_items = []
+                    st.rerun()
+
 
 # =========================================================
-# SITUATION STOCK
+# RUBRIQUE 3 : SITUATION DU STOCK
 # =========================================================
 with t_stock:
-    st.subheader(f"Situation du Stock — {CLIENT}")
+    st.subheader(
+        f"📊 Situation du Stock à Jour — {st.session_state.selected_client}"
+    )
 
-    rows = []
-    for a in article_rows():
-        aid = a["id"]
+    stock_summary = []
+    for art in st.session_state.config["articles"]:
+        # Total Entrées via BE pour ce client
+        tot_be = sum(
+            it["Quantité"]
+            for be in st.session_state.be_list
+            if be["client"] == st.session_state.selected_client
+            for it in be["items"]
+            if it["Article"] == art
+        )
 
-        be = query(
-            """
-            SELECT COALESCE(SUM(quantity),0) AS q
-            FROM movements
-            WHERE client=? AND article_id=? AND movement_type='BE'
-            """,
-            (CLIENT, aid),
-            one=True,
-        )["q"]
+        # Total Sorties via BS pour ce client
+        tot_bs = sum(
+            it["Quantité"]
+            for bs in st.session_state.bs_list
+            if bs["client"] == st.session_state.selected_client
+            for it in bs["items"]
+            if it["Article"] == art
+        )
 
-        bs = query(
-            """
-            SELECT COALESCE(SUM(quantity),0) AS q
-            FROM movements
-            WHERE client=? AND article_id=? AND movement_type='BS'
-            """,
-            (CLIENT, aid),
-            one=True,
-        )["q"]
+        ajust_man = st.session_state.manual_adjustments.get(art, 0)
+        stk_actuel = st.session_state.stock_db.get(art, 0)
 
-        manual = query(
-            """
-            SELECT COALESCE(SUM(quantity),0) AS q
-            FROM movements
-            WHERE client=? AND article_id=? AND movement_type='MANUEL'
-            """,
-            (CLIENT, aid),
-            one=True,
-        )["q"]
-
-        rows.append(
+        stock_summary.append(
             {
-                "Article": a["name"],
-                "Entrées BE": int(be),
-                "Sorties BS": int(bs),
-                "Ajustements manuels": int(manual),
-                "Stock actuel": current_stock(CLIENT, aid),
+                "Article": art,
+                "Total Entrées (BE)": tot_be,
+                "Total Sorties (BS)": tot_bs,
+                "Ajustements Manuels Admin": ajust_man,
+                "Stock Actuel": stk_actuel,
             }
         )
 
-    if rows:
-        df_stock = pd.DataFrame(rows)
-        st.dataframe(df_stock, use_container_width=True, hide_index=True)
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.metric("Articles", len(rows))
-        with c2:
-            st.metric("Total unités en stock", int(df_stock["Stock actuel"].sum()))
-        with c3:
-            st.metric("Sorties BS", int(df_stock["Sorties BS"].sum()))
-    else:
-        st.info("Aucun article configuré.")
+    st.dataframe(pd.DataFrame(stock_summary), use_container_width=True)
 
 
 # =========================================================
-# MODIFICATION & IMPRESSION
+# RUBRIQUE 4 : MODIFICATION & IMPRESSION DES BONS
 # =========================================================
 with t_mods:
-    st.subheader("Modification et impression des Bons")
+    st.subheader("✏️ Modification & Impression des Bons")
 
-    if ROLE in ("coordinateur", "coordinatrice"):
-        st.info("Votre rôle permet la consultation et l'impression des BE/BS, mais pas leur modification.")
-
-    type_choice = st.radio(
-        "Choisir le type de bon",
-        ["BE", "BS"],
+    bon_type = st.radio(
+        "Sélectionnez le type de bon :",
+        ["Bons d'Entrée (BE)", "Bons de Sortie (BS)"],
         horizontal=True,
-        key="mod_type",
     )
 
-    bons = query(
-        "SELECT * FROM bons WHERE client=? AND type=? ORDER BY id DESC",
-        (CLIENT, type_choice),
-    )
+    if bon_type == "Bons d'Entrée (BE)":
+        client_bes = [
+            b
+            for b in st.session_state.be_list
+            if b["client"] == st.session_state.selected_client
+        ]
 
-    if not bons:
-        st.info(f"Aucun {type_choice} enregistré pour {CLIENT}.")
-    else:
-        labels = [f"{b['number']} — {b['date_bon']}" for b in bons]
-        selected_label = st.selectbox("Choisir un bon", labels)
-        selected_id = bons[labels.index(selected_label)]["id"]
-        bon = get_bon(selected_id)
-        items = get_bon_items(selected_id)
-
-        st.write(
-            f"**N° :** {bon['number']}  |  **Date :** {bon['date_bon']}  |  "
-            f"**Saisi par :** {bon['created_by']}"
-        )
-
-        if bon["type"] == "BE":
-            st.write(
-                f"**Fournisseur :** {bon['fournisseur']} | "
-                f"**Lieu :** {bon['lieu_livraison']} | "
-                f"**Réceptionné par :** {bon['receptionne_par']}"
-            )
+        if not client_bes:
+            st.info("Aucun Bon d'Entrée enregistré pour ce client.")
         else:
-            st.write(
-                f"**Équipe :** {bon['equipe']} | "
-                f"**Ressource :** {bon['resource'] or '-'} | "
-                f"**Destination :** {bon['destination']}"
+            sel_be_id = st.selectbox(
+                "Choisir un Bon d'Entrée", [b["id"] for b in client_bes]
+            )
+            be_target = next(b for b in client_bes if b["id"] == sel_be_id)
+
+            st.write("---")
+            if user_role in ["admin", "magasinier"]:
+                st.write("##### Modifier les informations du Bon :")
+                with st.form("form_edit_be"):
+                    e_fournis = st.text_input(
+                        "Fournisseur", value=be_target["fournisseur"]
+                    )
+                    e_lieu = st.text_input(
+                        "Lieu de livraison", value=be_target["lieu_livraison"]
+                    )
+
+                    if st.form_submit_button("💾 Enregistrer les modifications"):
+                        be_target["fournisseur"] = e_fournis
+                        be_target["lieu_livraison"] = e_lieu
+                        st.success("Informations du BE mises à jour !")
+                        st.rerun()
+
+            st.write("##### Contenu du bon :")
+            st.dataframe(
+                pd.DataFrame(be_target["items"]), use_container_width=True
             )
 
-        st.dataframe(
-            pd.DataFrame([dict(i) for i in items]),
-            use_container_width=True,
-            hide_index=True,
-        )
+            col_be_act1, col_be_act2 = st.columns(2)
+            with col_be_act1:
+                if user_role in ["admin", "magasinier"]:
+                    if st.button("❌ Supprimer ce BE", use_container_width=True):
+                        # Restituer/Ajuster le stock
+                        for it in be_target["items"]:
+                            st.session_state.stock_db[it["Article"]] -= it[
+                                "Quantité"
+                            ]
+                        st.session_state.be_list = [
+                            b
+                            for b in st.session_state.be_list
+                            if b["id"] != sel_be_id
+                        ]
+                        st.success("BE supprimé et stock mis à jour !")
+                        st.rerun()
 
-        # Impression accessible à tous les rôles autorisés
-        pdf_data = generate_pdf(selected_id)
-        docx_data = generate_docx(selected_id)
+            with col_be_act2:
+                logo_path = CLIENTS_INFO[st.session_state.selected_client][
+                    "logo"
+                ]
+                html_data = generate_be_html(be_target, logo_path)
+                st.download_button(
+                    label="🖨️ Télécharger / Imprimer BE (Modèle Exact HTML/Word)",
+                    data=html_data,
+                    file_name=f"{be_target['id']}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
 
-        p1, p2 = st.columns(2)
-        with p1:
-            st.download_button(
-                "📄 Télécharger en PDF",
-                data=pdf_data,
-                file_name=f"{make_safe_filename(bon['number'])}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
+    else:
+        client_bss = [
+            b
+            for b in st.session_state.bs_list
+            if b["client"] == st.session_state.selected_client
+        ]
+
+        if not client_bss:
+            st.info("Aucun Bon de Sortie enregistré pour ce client.")
+        else:
+            sel_bs_id = st.selectbox(
+                "Choisir un Bon de Sortie", [b["id"] for b in client_bss]
             )
-        with p2:
-            st.download_button(
-                "📝 Télécharger en Word",
-                data=docx_data,
-                file_name=f"{make_safe_filename(bon['number'])}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True,
-            )
+            bs_target = next(b for b in client_bss if b["id"] == sel_bs_id)
 
-        if can(ROLE, "edit"):
-            st.divider()
-            st.markdown("##### Modifier le bon")
-
-            with st.form(f"edit_bon_{selected_id}"):
-                if bon["type"] == "BE":
-                    new_date = st.date_input(
-                        "Date du BE",
-                        value=datetime.strptime(bon["date_bon"], "%Y-%m-%d").date(),
-                        max_value=date.today(),
-                    )
-                    suppliers = active_names("fournisseurs")
-                    supplier_options = suppliers + ["Autre (saisie manuelle)"]
-                    current_supplier = bon["fournisseur"] or ""
-                    if current_supplier in suppliers:
-                        sup_index = supplier_options.index(current_supplier)
-                        supplier_choice = st.selectbox(
-                            "Fournisseur",
-                            supplier_options,
-                            index=sup_index,
-                        )
-                        new_supplier = supplier_choice
-                    else:
-                        supplier_choice = st.selectbox(
-                            "Fournisseur",
-                            supplier_options,
-                            index=len(supplier_options) - 1,
-                        )
-                        new_supplier = (
-                            st.text_input("Nouveau fournisseur", value=current_supplier)
-                            if supplier_choice == "Autre (saisie manuelle)"
-                            else supplier_choice
-                        )
-                    new_place = st.text_input(
-                        "Lieu de livraison",
-                        value=bon["lieu_livraison"] or "",
-                    )
-                else:
-                    new_date = st.date_input(
-                        "Date du BS",
-                        value=datetime.strptime(bon["date_bon"], "%Y-%m-%d").date(),
-                        max_value=date.today(),
-                    )
-                    teams = active_names("equipes")
-                    resources = active_names("resources")
-                    team_current = bon["equipe"] or ""
-                    resource_current = bon["resource"] or ""
-                    new_team = st.selectbox(
+            st.write("---")
+            if user_role in ["admin", "magasinier"]:
+                st.write("##### Modifier les informations du Bon :")
+                with st.form("form_edit_bs"):
+                    e_eq = st.selectbox(
                         "Équipe",
-                        teams,
-                        index=teams.index(team_current) if team_current in teams else 0,
+                        st.session_state.config["equipes"],
+                        index=st.session_state.config["equipes"].index(
+                            bs_target["equipe"]
+                        )
+                        if bs_target["equipe"]
+                        in st.session_state.config["equipes"]
+                        else 0,
                     )
-                    resource_options = [""] + resources
-                    new_resource = st.selectbox(
-                        "Ressource",
-                        resource_options,
-                        index=resource_options.index(resource_current)
-                        if resource_current in resource_options else 0,
-                    )
-                    new_destination = st.text_input(
-                        "Destination / Projet",
-                        value=bon["destination"] or "",
+                    e_dest = st.text_input(
+                        "Destination", value=bs_target["destination"]
                     )
 
-                st.markdown("**Articles du bon**")
-                edited_items = []
-                article_names = active_names("articles")
+                    if st.form_submit_button("💾 Enregistrer les modifications"):
+                        bs_target["equipe"] = e_eq
+                        bs_target["destination"] = e_dest
+                        st.success("Informations du BS mises à jour !")
+                        st.rerun()
 
-                for idx, item in enumerate(items):
-                    c1, c2, c3, c4 = st.columns([3, 3, 1.5, 3])
-                    with c1:
-                        old_article = item["article"]
-                        new_article = st.selectbox(
-                            "Article",
-                            article_names,
-                            index=article_names.index(old_article)
-                            if old_article in article_names else 0,
-                            key=f"edit_art_{selected_id}_{idx}",
-                        )
-                    with c2:
-                        new_ref = st.text_input(
-                            "Référence",
-                            value=item["reference"] or "",
-                            key=f"edit_ref_{selected_id}_{idx}",
-                        )
-                    with c3:
-                        new_qty = st.number_input(
-                            "Qté",
-                            min_value=1,
-                            value=max(1, int(item["quantity"])),
-                            step=1,
-                            key=f"edit_qty_{selected_id}_{idx}",
-                        )
-                    with c4:
-                        new_rem = st.text_input(
-                            "Remarque",
-                            value=item["remarque"] or "",
-                            key=f"edit_rem_{selected_id}_{idx}",
-                        )
+            st.write("##### Contenu du bon :")
+            st.dataframe(
+                pd.DataFrame(bs_target["items"]), use_container_width=True
+            )
 
-                    edited_items.append(
-                        {
-                            "id": item["id"],
-                            "article": new_article,
-                            "reference": new_ref,
-                            "quantity": int(new_qty),
-                            "remarque": new_rem,
-                        }
-                    )
+            col_bs_act1, col_bs_act2 = st.columns(2)
+            with col_bs_act1:
+                if user_role in ["admin", "magasinier"]:
+                    if st.button("❌ Supprimer ce BS", use_container_width=True):
+                        # Réintégrer le stock
+                        for it in bs_target["items"]:
+                            st.session_state.stock_db[it["Article"]] += it[
+                                "Quantité"
+                            ]
+                        st.session_state.bs_list = [
+                            b
+                            for b in st.session_state.bs_list
+                            if b["id"] != sel_bs_id
+                        ]
+                        st.success("BS supprimé et stock réintégré !")
+                        st.rerun()
 
-                if st.form_submit_button("💾 Enregistrer les modifications"):
-                    # Vérification du futur stock : on annule d'abord l'ancien mouvement,
-                    # puis on applique le nouveau.
-                    old_items = items
-
-                    # Stock impact des anciens articles
-                    old_sign = 1 if bon["type"] == "BE" else -1
-                    for old in old_items:
-                        old_aid = article_id_by_name(old["article"])
-                        old_stock = current_stock(CLIENT, old_aid)
-                        set_stock(CLIENT, old_aid, old_stock - old_sign * int(old["quantity"]))
-
-                    # Contrôle BS avant application
-                    if bon["type"] == "BS":
-                        required = {}
-                        for e in edited_items:
-                            aid = article_id_by_name(e["article"])
-                            required[aid] = required.get(aid, 0) + e["quantity"]
-                        bad = []
-                        for aid, req in required.items():
-                            if current_stock(CLIENT, aid) < req:
-                                arow = query("SELECT name FROM articles WHERE id=?", (aid,), one=True)
-                                bad.append(f"{arow['name']} : stock insuffisant ({current_stock(CLIENT, aid)} disponible).")
-                        if bad:
-                            for msg in bad:
-                                st.error(msg)
-                            st.stop()
-
-                    # Supprimer anciennes lignes et mouvements associés
-                    execute("DELETE FROM bon_items WHERE bon_id=?", (selected_id,))
-                    execute(
-                        "DELETE FROM movements WHERE reference_bon=? AND client=?",
-                        (bon["number"], CLIENT),
-                    )
-
-                    # Mise à jour entête
-                    if bon["type"] == "BE":
-                        execute(
-                            """
-                            UPDATE bons
-                            SET date_bon=?, fournisseur=?, lieu_livraison=?
-                            WHERE id=?
-                            """,
-                            (str(new_date), new_supplier.strip(), new_place.strip(), selected_id),
-                        )
-                    else:
-                        execute(
-                            """
-                            UPDATE bons
-                            SET date_bon=?, equipe=?, resource=?, destination=?
-                            WHERE id=?
-                            """,
-                            (str(new_date), new_team, new_resource, new_destination.strip(), selected_id),
-                        )
-
-                    sign = 1 if bon["type"] == "BE" else -1
-
-                    for e in edited_items:
-                        aid = article_id_by_name(e["article"])
-                        execute(
-                            """
-                            INSERT INTO bon_items
-                            (bon_id,article_id,reference,quantity,remarque)
-                            VALUES(?,?,?,?,?)
-                            """,
-                            (
-                                selected_id,
-                                aid,
-                                e["reference"].strip(),
-                                e["quantity"],
-                                e["remarque"].strip(),
-                            ),
-                        )
-
-                        old_stock = current_stock(CLIENT, aid)
-                        set_stock(CLIENT, aid, old_stock + sign * e["quantity"])
-                        add_movement(
-                            CLIENT,
-                            aid,
-                            bon["type"],
-                            e["quantity"],
-                            bon["number"],
-                            st.session_state.current_user,
-                            e["remarque"],
-                        )
-
-                    st.success("Bon modifié avec succès et stock recalculé.")
-                    st.rerun()
-
-            if st.button("❌ Supprimer ce bon", key=f"delete_{selected_id}"):
-                # Annuler l'impact stock avant suppression
-                sign = 1 if bon["type"] == "BE" else -1
-                for item in items:
-                    aid = article_id_by_name(item["article"])
-                    old_stock = current_stock(CLIENT, aid)
-                    set_stock(CLIENT, aid, old_stock - sign * int(item["quantity"]))
-
-                execute("DELETE FROM bon_items WHERE bon_id=?", (selected_id,))
-                execute("DELETE FROM movements WHERE reference_bon=? AND client=?", (bon["number"], CLIENT))
-                execute("DELETE FROM bons WHERE id=?", (selected_id,))
-                st.success("Bon supprimé et stock recalculé.")
-                st.rerun()
+            with col_bs_act2:
+                logo_path = CLIENTS_INFO[st.session_state.selected_client][
+                    "logo"
+                ]
+                html_bs_data = generate_be_html(bs_target, logo_path).replace(
+                    "Bon d'entree", "Bon de sortie"
+                )
+                st.download_button(
+                    label="🖨️ Télécharger / Imprimer BS (Modèle Exact HTML/Word)",
+                    data=html_bs_data,
+                    file_name=f"{bs_target['id']}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
 
 
 # =========================================================
-# CONFIGURATION ADMIN
+# RUBRIQUE 5 : CONFIGURATION (RÉSERVÉE A L'ADMIN)
 # =========================================================
 with t_config:
-    if ROLE != "admin":
-        st.warning("🔒 Cette rubrique est réservée à l'administrateur.")
+    if user_role != "admin":
+        st.error("🔒 Cette rubrique est strictement réservée à l'administrateur.")
     else:
-        st.subheader("Configuration système")
+        st.subheader("⚙️ Configuration Référentiels & Stock")
 
-        c1, c2 = st.columns(2)
+        col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
 
-        with c1:
-            st.markdown("##### 📦 Articles")
-            article_new = st.text_input("Nouvel article", key="new_article")
-            initial_qty = st.number_input(
-                "Quantité initiale (0 si aucune)",
-                min_value=0,
-                value=0,
-                step=1,
-                key="initial_article_qty",
+        # GESTION ARTICLES
+        with col_cfg1:
+            st.write("##### 📦 Articles")
+            add_art = st.text_input("Nouvel article", key="cfg_add_art")
+            if st.button("Ajouter Article"):
+                if (
+                    add_art
+                    and add_art not in st.session_state.config["articles"]
+                ):
+                    st.session_state.config["articles"].append(add_art)
+                    st.session_state.stock_db[add_art] = 0
+                    st.success(f"Article '{add_art}' ajouté.")
+                    st.rerun()
+
+            st.write("---")
+            del_art = st.selectbox(
+                "Supprimer un article",
+                st.session_state.config["articles"],
+                key="cfg_del_art",
             )
+            if st.button("Supprimer Article"):
+                st.session_state.config["articles"].remove(del_art)
+                st.session_state.stock_db.pop(del_art, None)
+                st.success("Article supprimé.")
+                st.rerun()
 
-            if st.button("➕ Ajouter l'article", key="add_article"):
-                if not article_new.strip():
-                    st.error("Le nom de l'article est obligatoire.")
-                elif query("SELECT id FROM articles WHERE name=?", (article_new.strip(),), one=True):
-                    st.error("Cet article existe déjà.")
-                else:
-                    aid = execute(
-                        "INSERT INTO articles(name,active) VALUES(?,1)",
-                        (article_new.strip(),),
-                    )
-                    for client in CLIENTS:
-                        set_stock(client, aid, int(initial_qty))
-                    st.success("Article ajouté.")
+        # GESTION FOURNISSEURS
+        with col_cfg2:
+            st.write("##### 🏢 Fournisseurs")
+            add_four = st.text_input("Nouveau fournisseur", key="cfg_add_four")
+            if st.button("Ajouter Fournisseur"):
+                if (
+                    add_four
+                    and add_four not in st.session_state.config["fournisseurs"]
+                ):
+                    st.session_state.config["fournisseurs"].append(add_four)
+                    st.success(f"Fournisseur '{add_four}' ajouté.")
                     st.rerun()
 
-            articles_all = query("SELECT id,name,active FROM articles ORDER BY name")
-            if articles_all:
-                selected_article = st.selectbox(
-                    "Article à gérer",
-                    [a["name"] for a in articles_all],
-                    key="cfg_article_select",
-                )
-                selected_article_row = next(a for a in articles_all if a["name"] == selected_article)
+            st.write("---")
+            del_four = st.selectbox(
+                "Supprimer Fournisseur",
+                st.session_state.config["fournisseurs"],
+                key="cfg_del_four",
+            )
+            if st.button("Supprimer Fournisseur"):
+                st.session_state.config["fournisseurs"].remove(del_four)
+                st.success("Fournisseur supprimé.")
+                st.rerun()
 
-                col_a1, col_a2 = st.columns(2)
-                with col_a1:
-                    renamed = st.text_input(
-                        "Modifier le nom",
-                        value=selected_article_row["name"],
-                        key="rename_article",
-                    )
-                    if st.button("✏️ Modifier l'article", key="rename_article_btn"):
-                        if not renamed.strip():
-                            st.error("Le nom ne peut pas être vide.")
-                        else:
-                            try:
-                                execute(
-                                    "UPDATE articles SET name=? WHERE id=?",
-                                    (renamed.strip(), selected_article_row["id"]),
-                                )
-                                st.success("Article modifié.")
-                                st.rerun()
-                            except sqlite3.IntegrityError:
-                                st.error("Ce nom existe déjà.")
-
-                with col_a2:
-                    if st.button("🗑️ Supprimer l'article", key="delete_article"):
-                        used = query(
-                            "SELECT COUNT(*) AS n FROM bon_items WHERE article_id=?",
-                            (selected_article_row["id"],),
-                            one=True,
-                        )["n"]
-                        stock_used = sum(
-                            current_stock(c, selected_article_row["id"]) for c in CLIENTS
-                        )
-                        if used or stock_used:
-                            st.error(
-                                "Impossible de supprimer cet article : il possède un historique ou un stock. "
-                                "Vous pouvez le désactiver."
-                            )
-                        else:
-                            execute(
-                                "UPDATE articles SET active=0 WHERE id=?",
-                                (selected_article_row["id"],),
-                            )
-                            st.success("Article supprimé de la liste active.")
-                            st.rerun()
-
-        with c2:
-            st.markdown("##### 🏢 Fournisseurs")
-            new_supplier = st.text_input("Nouveau fournisseur", key="new_supplier")
-            if st.button("➕ Ajouter le fournisseur", key="add_supplier"):
-                if not new_supplier.strip():
-                    st.error("Nom obligatoire.")
-                elif query("SELECT id FROM fournisseurs WHERE name=?", (new_supplier.strip(),), one=True):
-                    st.error("Ce fournisseur existe déjà.")
-                else:
-                    execute(
-                        "INSERT INTO fournisseurs(name,active) VALUES(?,1)",
-                        (new_supplier.strip(),),
-                    )
-                    st.success("Fournisseur ajouté.")
+        # GESTION ÉQUIPES / RESSOURCES
+        with col_cfg3:
+            st.write("##### 👥 Équipes / Ressources")
+            add_eq = st.text_input("Nouvelle équipe", key="cfg_add_eq")
+            if st.button("Ajouter Équipe"):
+                if add_eq and add_eq not in st.session_state.config["equipes"]:
+                    st.session_state.config["equipes"].append(add_eq)
+                    st.success(f"Équipe '{add_eq}' ajoutée.")
                     st.rerun()
 
-            st.write("Fournisseurs actifs :", ", ".join(active_names("fournisseurs")))
-
-            st.markdown("##### 👷 Équipes")
-            new_team = st.text_input("Nouvelle équipe", key="new_team")
-            if st.button("➕ Ajouter l'équipe", key="add_team"):
-                if not new_team.strip():
-                    st.error("Nom obligatoire.")
-                elif query("SELECT id FROM equipes WHERE name=?", (new_team.strip(),), one=True):
-                    st.error("Cette équipe existe déjà.")
-                else:
-                    execute(
-                        "INSERT INTO equipes(name,active) VALUES(?,1)",
-                        (new_team.strip(),),
-                    )
-                    st.success("Équipe ajoutée.")
-                    st.rerun()
-
-            st.write("Équipes actives :", ", ".join(active_names("equipes")))
-
-            st.markdown("##### 👤 Ressources projets")
-            new_resource = st.text_input("Nouvelle ressource", key="new_resource")
-            if st.button("➕ Ajouter la ressource", key="add_resource"):
-                if not new_resource.strip():
-                    st.error("Nom obligatoire.")
-                elif query("SELECT id FROM resources WHERE name=?", (new_resource.strip(),), one=True):
-                    st.error("Cette ressource existe déjà.")
-                else:
-                    execute(
-                        "INSERT INTO resources(name,active) VALUES(?,1)",
-                        (new_resource.strip(),),
-                    )
-                    st.success("Ressource ajoutée.")
-                    st.rerun()
-
-            st.write("Ressources actives :", ", ".join(active_names("resources")))
+            st.write("---")
+            del_eq = st.selectbox(
+                "Supprimer Équipe",
+                st.session_state.config["equipes"],
+                key="cfg_del_eq",
+            )
+            if st.button("Supprimer Équipe"):
+                st.session_state.config["equipes"].remove(del_eq)
+                st.success("Équipe supprimée.")
+                st.rerun()
 
         st.divider()
 
-        st.markdown("##### 🔧 Ajustement manuel du stock")
-        st.caption(
-            "Toute modification manuelle est enregistrée comme mouvement MANUEL et apparaît dans la situation du stock."
-        )
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            clients_options = list(CLIENTS.keys())
-            manual_client = st.selectbox("Client", clients_options, key="manual_client")
-        with c2:
-            article_options = active_names("articles")
-            manual_article = st.selectbox("Article", article_options, key="manual_article")
-        with c3:
-            aid = article_id_by_name(manual_article)
-            old_qty = current_stock(manual_client, aid)
-            new_qty = st.number_input(
-                "Nouvelle quantité",
+        # AJUSTEMENT MANUEL DU STOCK
+        st.subheader("🛠️ Ajustement Manuel du Stock")
+        c_adj1, c_adj2 = st.columns(2)
+        with c_adj1:
+            adj_art = st.selectbox(
+                "Article à ajuster",
+                st.session_state.config["articles"],
+                key="adj_art_sel",
+            )
+        with c_adj2:
+            current_stk = st.session_state.stock_db.get(adj_art, 0)
+            new_stk_val = st.number_input(
+                f"Nouveau stock pour {adj_art} (Actuel: {current_stk})",
                 min_value=0,
-                value=old_qty,
-                step=1,
-                key="manual_qty",
+                value=current_stk,
             )
 
-        manual_comment = st.text_input("Motif de l'ajustement", key="manual_comment")
-
-        if st.button("💾 Appliquer l'ajustement manuel", key="apply_manual"):
-            if new_qty < 0:
-                st.error("La quantité ne peut pas être négative.")
-            elif new_qty == old_qty:
-                st.info("Aucun changement.")
-            else:
-                delta = int(new_qty - old_qty)
-                set_stock(manual_client, aid, int(new_qty))
-                add_movement(
-                    manual_client,
-                    aid,
-                    "MANUEL",
-                    delta,
-                    "AJUSTEMENT_ADMIN",
-                    st.session_state.current_user,
-                    manual_comment.strip(),
-                )
-                st.success(
-                    f"Stock de {manual_article} pour {manual_client} mis à jour : "
-                    f"{old_qty} → {new_qty}."
-                )
-                st.rerun()
+        if st.button("💾 Valider l'Ajustement Manuel"):
+            diff = new_stk_val - current_stk
+            st.session_state.stock_db[adj_art] = new_stk_val
+            st.session_state.manual_adjustments[adj_art] = (
+                st.session_state.manual_adjustments.get(adj_art, 0) + diff
+            )
+            st.success(f"Stock de {adj_art} mis à jour à {new_stk_val} !")
+            st.rerun()
