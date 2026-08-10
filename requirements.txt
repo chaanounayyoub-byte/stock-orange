@@ -1,5 +1,5 @@
 streamlit
 pandas
-openpyxl
-st-supabase-connection
+Pillow
 reportlab
+python-docx
