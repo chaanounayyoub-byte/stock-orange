@@ -35,13 +35,24 @@ except Exception:
     st.error("Erreur de connexion à Supabase. Vérifiez vos identifiants.")
 
 # ---------------------------------------------------------
-# CLIENTS & THÈMES
+# CLIENTS, THÈMES & LOGOS (URL CDN)
 # ---------------------------------------------------------
 CLIENTS = {
-    "Orange": {"color": "#FF6600"},
-    "Inwi": {"color": "#A1006B"},
-    "ZTE": {"color": "#005BAC"}
+    "Orange": {
+        "color": "#FF6600",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg"
+    },
+    "Inwi": {
+        "color": "#A1006B",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/8/86/Inwi_logo.svg"
+    },
+    "ZTE": {
+        "color": "#005BAC",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/0/06/ZTE_logo.svg"
+    }
 }
+
+LOGO_NOMATIS = "https://www.nomatis.com/wp-content/uploads/2021/04/logo-nomatis.png"
 
 # ---------------------------------------------------------
 # SESSIONS ET AUTHENTIFICATION
@@ -73,6 +84,13 @@ st.markdown(f"""
         padding: 20px;
         text-align: center;
         background-color: #ffffff;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        margin-bottom: 15px;
+    }}
+    .client-card img {{
+        max-height: 80px;
+        object-fit: contain;
+        margin-bottom: 10px;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -131,9 +149,11 @@ def get_available_stock(client, article_name):
 # LOGIN PAGE
 # ---------------------------------------------------------
 if not st.session_state.user:
-    st.title("🔐 NOMATIS - Connexion Gestion de Stock")
+    st.markdown("<br/>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
+        st.image(LOGO_NOMATIS, width=200)
+        st.title("🔐 NOMATIS - Connexion")
         with st.form("login_form"):
             username = st.text_input("Nom d'utilisateur")
             password = st.text_input("Mot de passe", type="password")
@@ -162,39 +182,42 @@ if not st.session_state.user:
     st.stop()
 
 # ---------------------------------------------------------
-# SÉLECTION CLIENT
+# SÉLECTION CLIENT AVEC LOGOS
 # ---------------------------------------------------------
 if not st.session_state.selected_client:
+    st.image(LOGO_NOMATIS, width=180)
     st.title(f"👋 Bienvenue, {st.session_state.user}")
     st.subheader("Sélectionnez l'espace Client :")
+    
     cols = st.columns(3)
     for idx, (client_name, info) in enumerate(CLIENTS.items()):
         with cols[idx]:
             st.markdown(f"""
                 <div class="client-card">
-                    <h2 style="color: {info['color']};">{client_name}</h2>
+                    <img src="{info['logo']}" alt="{client_name}">
+                    <h2 style="color: {info['color']}; margin: 0;">{client_name}</h2>
                 </div>
             """, unsafe_allow_html=True)
-            st.write("")
             if st.button(f"Accéder au Stock {client_name}", key=f"btn_{client_name}", use_container_width=True):
                 st.session_state.selected_client = client_name
                 st.rerun()
     st.stop()
 
 # ---------------------------------------------------------
-# EN-TÊTE APPLI
+# EN-TÊTE APPLI AVEC LOGOS
 # ---------------------------------------------------------
 c_head1, c_head2, c_head3 = st.columns([2, 4, 2])
 with c_head1:
-    st.markdown("### 🏢 **NOMATIS**")
+    st.image(LOGO_NOMATIS, width=160)
     st.caption("Gestionnaire de Stock")
 with c_head2:
     st.markdown(f"<h2 style='color:{active_color}; text-align:center;'>ESPACE STOCK : {st.session_state.selected_client}</h2>", unsafe_allow_html=True)
 with c_head3:
+    st.image(CLIENTS[st.session_state.selected_client]["logo"], width=80)
     st.write(f"👤 **{st.session_state.user}** (`{st.session_state.role}`)")
     b1, b2 = st.columns(2)
     with b1:
-        if st.button("Changer Client"):
+        if st.button("Changer"):
             st.session_state.selected_client = None
             st.rerun()
     with b2:
@@ -512,7 +535,6 @@ with tabs[1]:
         receptionne_par_bs = st.text_input("Réceptionné par (Nom du récepteur)", key="rec_bs")
         stock_bs = st.text_input("Stock", value=st.session_state.selected_client, disabled=True, key="s_bs")
 
-    # Aperçu rapide des stocks disponibles
     with st.expander("ℹ️ Cliquer pour voir les stocks actuellement disponibles", expanded=False):
         df_mvt_check = fetch_mouvements(st.session_state.selected_client)
         if not df_mvt_check.empty and "quantite" in df_mvt_check.columns:
@@ -551,10 +573,7 @@ with tabs[1]:
         if not n_bl_bs or not destination_bs or not receptionne_par_bs or df_bs_input.empty:
             st.error("Veuillez remplir le N° Order, le Lieu de livraison et le Récepteur.")
         else:
-            # 🔍 VÉRIFICATION DU STOCK DISPONIBLE
             stock_errors = []
-            
-            # Regrouper les quantités saisies au cas où le même article est ajouté plusieurs fois
             df_grouped = df_bs_input.groupby("Désignation")["Quantité"].sum().reset_index()
             
             for _, row in df_grouped.iterrows():
@@ -738,29 +757,25 @@ if st.session_state.role == "ADMIN":
             st.subheader("Gestion des Utilisateurs")
             u_col1, u_col2, u_col3 = st.columns(3)
             with u_col1:
-                new_u = st.text_input("Nom Utilisateur")
+                new_u_name = st.text_input("Nom d'utilisateur", key="nu_name")
             with u_col2:
-                new_p = st.text_input("Mot de Passe", type="password")
+                new_u_pass = st.text_input("Mot de passe", type="password", key="nu_pass")
             with u_col3:
-                new_r = st.selectbox("Rôle", ["MAGASINIER", "ADMIN"])
+                new_u_role = st.selectbox("Rôle", ["MAGASINIER", "ADMIN"], key="nu_role")
 
-            if st.button("➕ Ajouter / Mettre à jour Utilisateur"):
-                if new_u and new_p:
-                    supabase.table("utilisateurs").upsert({"username": new_u, "password": new_p, "role": new_r}, on_conflict="username").execute()
-                    st.success(f"Utilisateur {new_u} créé ou mis à jour !")
+            if st.button("➕ Ajouter Utilisateur"):
+                if new_u_name and new_u_pass:
+                    supabase.table("utilisateurs").insert({
+                        "username": new_u_name,
+                        "password": new_u_pass,
+                        "role": new_u_role
+                    }).execute()
+                    st.success("Utilisateur créé !")
                     st.rerun()
+                else:
+                    st.error("Remplissez tous les champs.")
 
             st.divider()
-            df_users_list = fetch_users()
-            if not df_users_list.empty and "username" in df_users_list.columns and "role" in df_users_list.columns:
-                st.dataframe(df_users_list[["username", "role"]], use_container_width=True)
-                u_to_del = st.selectbox("Supprimer un utilisateur :", df_users_list["username"].tolist())
-                if st.button("❌ Supprimer Utilisateur"):
-                    if u_to_del != "admin":
-                        supabase.table("utilisateurs").delete().eq("username", u_to_del).execute()
-                        st.success("Utilisateur supprimé !")
-                        st.rerun()
-                    else:
-                        st.error("Impossible de supprimer le compte Admin principal.")
-            elif not df_users_list.empty:
-                st.dataframe(df_users_list, use_container_width=True)
+            df_u_all = fetch_users()
+            if not df_u_all.empty:
+                st.dataframe(df_u_all[["username", "role"]], use_container_width=True)
