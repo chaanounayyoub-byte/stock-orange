@@ -7,15 +7,15 @@ import streamlit as st
 from PIL import Image, ImageOps
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
 )
 from docx import Document
 
 # =========================================================
-# CONFIGURATION & THÈME LIGHT SAAS MINIMALISTE
+# CONFIGURATION & THÈME LIGHT SAAS MINIMALISTE (DESIGN DE RÉFÉRENCE)
 # =========================================================
 st.set_page_config(
     page_title="NOMATIS — MW Stock Engine",
@@ -40,8 +40,8 @@ DEFAULT_EQUIPES = ["Nabil Team", "Yassine Team", "Issam Team"]
 DEFAULT_RESOURCES = ["Nabil", "Yassine", "Issam"]
 
 PERMISSIONS = {
-    "admin": {"be", "bs", "stock", "edit", "config"},
-    "magasinier": {"be", "bs", "stock", "edit"},
+    "admin": {"be", "bs", "stock", "edit", "config", "import"},
+    "magasinier": {"be", "bs", "stock", "edit", "import"},
     "coordinateur": {"stock", "print"},
     "coordinatrice": {"stock", "print"},
 }
@@ -113,7 +113,7 @@ st.markdown(
         }
 
         /* Champs de Saisie (Inputs) */
-        .stTextInput input, .stSelectbox div[data-baseweb="select"], .stNumberInput input {
+        .stTextInput input, .stSelectbox div[data-baseweb="select"], .stNumberInput input, .stDateInput input {
             background-color: #FFFFFF !important;
             color: #0F172A !important;
             border: 1px solid #CBD5E1 !important;
@@ -279,7 +279,7 @@ init_db()
 
 
 # =========================================================
-# UTILITAIRES & FONCTIONS
+# UTILITAIRES & FONCTIONS DE BASE
 # =========================================================
 def query(sql, params=(), one=False):
     conn = get_conn()
@@ -357,7 +357,7 @@ def normalized_logo(path, size=(300, 120)):
 
 
 # =========================================================
-# GENERATEURS DE DOCUMENTS (PDF & DOCX)
+# GÉNÉRATION DE DOCUMENTS (PDF & DOCX)
 # =========================================================
 def generate_pdf(bon_id):
     bon = query("SELECT * FROM bons WHERE id=?", (bon_id,), one=True)
@@ -370,21 +370,39 @@ def generate_pdf(bon_id):
     styles = getSampleStyleSheet()
     story = []
 
+    logo_info = CLIENTS.get(bon["client"], {})
+    logo_path = logo_info.get("logo")
+    
+    header_data = []
+    if logo_path and os.path.exists(logo_path):
+        try:
+            img_rl = RLImage(logo_path, width=40*mm, height=18*mm)
+            header_data.append([img_rl, Paragraph(f"<font size=16 color='#0F172A'><b>NOMATIS — MW STOCK</b></font>", styles["Normal"])])
+        except Exception:
+            header_data.append([Paragraph(f"<font size=16 color='#0F172A'><b>NOMATIS</b></font>", styles["Normal"])])
+    else:
+        header_data.append([Paragraph(f"<font size=16 color='#0F172A'><b>NOMATIS</b></font>", styles["Normal"])])
+
+    header_table = Table(header_data, colWidths=[50*mm, 130*mm])
+    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
+    story.append(header_table)
+    story.append(Spacer(1, 10))
+
     title = "BON D'ENTRÉE" if bon["type"] == "BE" else "BON DE SORTIE"
-    story.append(Paragraph(f"<font size=18 color='#0F172A'><b>{title}</b></font>", styles["Title"]))
+    story.append(Paragraph(f"<font size=18 color='#2563EB'><b>{title} — {bon['number']}</b></font>", styles["Title"]))
     story.append(Spacer(1, 10))
 
     if bon["type"] == "BE":
         info = [
-            ["N° Bon", bon["number"], "Date", bon["date_bon"]],
+            ["N° Bon", bon["number"], "Date Bon", bon["date_bon"]],
             ["Fournisseur", bon["fournisseur"] or "", "Lieu Livraison", bon["lieu_livraison"] or ""],
-            ["Réceptionné par", bon["receptionne_par"] or "", "Client", bon["client"]],
+            ["Réceptionné par", bon["receptionne_par"] or "", "Client / Projet", bon["client"]],
         ]
     else:
         info = [
-            ["N° Bon", bon["number"], "Date", bon["date_bon"]],
-            ["Équipe", bon["equipe"] or "", "Ressource", bon["resource"] or ""],
-            ["Destination", bon["destination"] or "", "Client", bon["client"]],
+            ["N° Bon", bon["number"], "Date Bon", bon["date_bon"]],
+            ["Équipe Destination", bon["equipe"] or "", "Ressource", bon["resource"] or ""],
+            ["Destination / Site", bon["destination"] or "", "Client / Projet", bon["client"]],
         ]
 
     info_table = Table(info, colWidths=[35 * mm, 55 * mm, 35 * mm, 55 * mm])
@@ -433,7 +451,7 @@ def generate_docx(bon_id):
     doc = Document()
     doc.add_heading(f"BON DE {'ENTRÉE' if bon['type']=='BE' else 'SORTIE'} - {bon['number']}", level=1)
     p = doc.add_paragraph()
-    p.add_run(f"Client : {bon['client']}\nDate : {bon['date_bon']}\nCréé par : {bon['created_by']}")
+    p.add_run(f"Client / Projet : {bon['client']}\nDate Bon : {bon['date_bon']}\nCréé par : {bon['created_by']}")
 
     table = doc.add_table(rows=1, cols=4)
     table.style = "Table Grid"
@@ -457,7 +475,7 @@ def generate_docx(bon_id):
 
 
 # =========================================================
-# ETAT SESSION & AUTHENTIFICATION
+# ÉTAT SESSION & AUTHENTIFICATION
 # =========================================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -510,7 +528,7 @@ ROLE = CURRENT_USER["role"]
 
 
 # =========================================================
-# SELECTION DU CLIENT
+# SELECTION DU CLIENT / PROJET
 # =========================================================
 if not st.session_state.selected_client:
     st.markdown(
@@ -541,8 +559,9 @@ if not st.session_state.selected_client:
 
 CLIENT = st.session_state.selected_client
 
+
 # =========================================================
-# DASHBOARD / APPLICATION APRES LOGIN & CLIENT
+# APPLICATION PRINCIPALE APRES LOGIN & SELECTION CLIENT
 # =========================================================
 h1, h2 = st.columns([3, 1])
 with h1:
@@ -564,15 +583,21 @@ with h2:
         st.session_state.selected_client = None
         st.rerun()
 
-t_be, t_bs, t_stock, t_mods, t_config = st.tabs(
-    ["📥 Bon d'Entrée (BE)", "📤 Bon de Sortie (BS)", "📊 État du Stock", "✏️ Modification / Impression", "⚙️ Configuration"]
-)
+tabs_labels = ["📥 Bon d'Entrée (BE)", "📤 Bon de Sortie (BS)", "📊 État du Stock", "✏️ Modification / Impression"]
+if can(ROLE, "import"):
+    tabs_labels.append("📁 Import / Export Excel")
+if can(ROLE, "config"):
+    tabs_labels.append("⚙️ Configuration")
 
-# 📥 BE SECTION
-with t_be:
+tabs = st.tabs(tabs_labels)
+
+# ---------------------------------------------------------
+# 📥 TAB 1: BON D'ENTRÉE (BE)
+# ---------------------------------------------------------
+with tabs[0]:
     if can(ROLE, "be"):
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.subheader("Nouveau Bon d'Entrée")
+        st.subheader("Nouveau Bon d'Entrée (BE)")
         c1, c2, c3 = st.columns(3)
         date_be = c1.date_input("Date Bon", value=date.today(), key="be_d")
         num_be = c2.text_input("N° BE", value=f"BE-{date.today().strftime('%Y%m%d')}-01")
@@ -580,19 +605,22 @@ with t_be:
         lieu = st.text_input("Lieu de Livraison", value="Magasin Principal NOMATIS")
 
         st.markdown("---")
-        st.markdown("##### Ajouter des éléments")
+        st.markdown("##### Ajouter des articles au BE")
         r1, r2, r3, r4 = st.columns([2, 3, 1.5, 3])
         ref = r1.text_input("Référence", key="be_ref")
         art = r2.selectbox("Article", active_names("articles"), key="be_art")
         qty = r3.number_input("Qté", min_value=1, value=1, key="be_qty")
         rem = r4.text_input("Remarque", key="be_rem")
 
-        if st.button("➕ Ajouter la ligne"):
+        if st.button("➕ Ajouter la ligne", key="add_be_line"):
             st.session_state.temp_be_items.append({"ref": ref, "art": art, "qty": qty, "rem": rem})
 
         if st.session_state.temp_be_items:
-            st.table(pd.DataFrame(st.session_state.temp_be_items))
-            if st.button("💾 Valider et Enregistrer le BE"):
+            st.markdown("###### Articles à valider :")
+            st.dataframe(pd.DataFrame(st.session_state.temp_be_items), use_container_width=True)
+            
+            b1, b2 = st.columns(2)
+            if b1.button("💾 Valider et Enregistrer le BE", use_container_width=True):
                 bon_id = execute(
                     "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,fournisseur,lieu_livraison,receptionne_par,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
                     ("BE", num_be, CLIENT, str(date_be), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), fournisseur, lieu, CURRENT_USER["fullname"], CURRENT_USER["username"]),
@@ -603,21 +631,27 @@ with t_be:
                     set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) + item["qty"])
                     add_movement(CLIENT, art_id, "BE", item["qty"], num_be, CURRENT_USER["username"], item["rem"])
                 st.session_state.temp_be_items = []
-                st.success("BE enregistré avec succès !")
+                st.success("Bon d'Entrée enregistré avec succès !")
+                st.rerun()
+            if b2.button("🗑️ Vider le tableau", use_container_width=True):
+                st.session_state.temp_be_items = []
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.warning("Vous n'avez pas la permission de créer des bons d'entrée.")
 
-
-# 📤 BS SECTION
-with t_bs:
+# ---------------------------------------------------------
+# 📤 TAB 2: BON DE SORTIE (BS)
+# ---------------------------------------------------------
+with tabs[1]:
     if can(ROLE, "bs"):
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.subheader("Nouveau Bon de Sortie")
+        st.subheader("Nouveau Bon de Sortie (BS)")
         c1, c2, c3 = st.columns(3)
         date_bs = c1.date_input("Date Bon", value=date.today(), key="bs_d")
         num_bs = c2.text_input("N° BS", value=f"BS-{date.today().strftime('%Y%m%d')}-01")
         equipe = c3.selectbox("Équipe Destination", active_names("equipes"))
-        
+
         c4, c5 = st.columns(2)
         resource = c4.selectbox("Ressource / Technicien", active_names("resources"))
         destination = c5.text_input("Destination / Site", value="Site Telecom")
@@ -630,7 +664,7 @@ with t_bs:
         qty = r3.number_input("Qté", min_value=1, value=1, key="bs_qty")
         rem = r4.text_input("Remarque", key="bs_rem")
 
-        if st.button("➕ Ajouter au BS"):
+        if st.button("➕ Ajouter au BS", key="add_bs_line"):
             art_id = article_id_by_name(art)
             stk_dispo = current_stock(CLIENT, art_id)
             if qty > stk_dispo:
@@ -639,8 +673,11 @@ with t_bs:
                 st.session_state.temp_bs_items.append({"ref": ref, "art": art, "qty": qty, "rem": rem})
 
         if st.session_state.temp_bs_items:
-            st.table(pd.DataFrame(st.session_state.temp_bs_items))
-            if st.button("💾 Valider et Enregistrer le BS"):
+            st.markdown("###### Articles à sortir :")
+            st.dataframe(pd.DataFrame(st.session_state.temp_bs_items), use_container_width=True)
+
+            b1, b2 = st.columns(2)
+            if b1.button("💾 Valider et Enregistrer le BS", use_container_width=True):
                 bon_id = execute(
                     "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,equipe,resource,destination,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
                     ("BS", num_bs, CLIENT, str(date_bs), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), equipe, resource, destination, CURRENT_USER["username"]),
@@ -651,13 +688,19 @@ with t_bs:
                     set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) - item["qty"])
                     add_movement(CLIENT, art_id, "BS", item["qty"], num_bs, CURRENT_USER["username"], item["rem"])
                 st.session_state.temp_bs_items = []
-                st.success("BS enregistré avec succès !")
+                st.success("Bon de Sortie enregistré avec succès !")
+                st.rerun()
+            if b2.button("🗑️ Vider la liste", use_container_width=True):
+                st.session_state.temp_bs_items = []
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.warning("Vous n'avez pas la permission de créer des bons de sortie.")
 
-
-# 📊 STOCK SECTION
-with t_stock:
+# ---------------------------------------------------------
+# 📊 TAB 3: ÉTAT DU STOCK & HISTORIQUE
+# ---------------------------------------------------------
+with tabs[2]:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader(f"État du Stock en Temps Réel — {CLIENT}")
 
@@ -678,11 +721,12 @@ with t_stock:
         c2.metric("Total Unités en Stock", int(df_stock["Stock"].sum()))
         st.dataframe(df_stock, use_container_width=True, hide_index=True)
 
-    st.markdown("### Historique des Mouvements")
+    st.markdown("---")
+    st.subheader("Historique des Mouvements")
     movs = query(
         """
         SELECT m.created_at AS Date, m.movement_type AS Type, m.reference_bon AS Bon,
-               a.name AS Article, m.quantity AS Quantité, m.username AS Opérateur
+               a.name AS Article, m.quantity AS Quantité, m.username AS Opérateur, m.comment AS Remarque
         FROM movements m JOIN articles a ON a.id = m.article_id
         WHERE m.client = ? ORDER BY m.id DESC
         """,
@@ -690,13 +734,16 @@ with t_stock:
     )
     if movs:
         st.dataframe(pd.DataFrame([dict(m) for m in movs]), use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucun mouvement enregistré.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ✏️ MODIFICATION & IMPRESSION
-with t_mods:
+# ---------------------------------------------------------
+# ✏️ TAB 4: MODIFICATION & IMPRESSION DES BONS
+# ---------------------------------------------------------
+with tabs[3]:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.subheader("Consultation & Impression")
+    st.subheader("Consultation, Impression & Edition des Bons")
     bons = query("SELECT * FROM bons WHERE client=? ORDER BY id DESC", (CLIENT,))
     if bons:
         opts = [f"{b['type']} - {b['number']} ({b['date_bon']}) - ID:{b['id']}" for b in bons]
@@ -710,29 +757,188 @@ with t_mods:
         with c2:
             docx_b = generate_docx(selected_id)
             st.download_button("📝 Télécharger en Word (.docx)", docx_b, file_name=f"Bon_{selected_id}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+
+        if can(ROLE, "edit"):
+            st.markdown("---")
+            st.markdown("##### Actions de Modification / Suppression")
+            b_data = query("SELECT * FROM bons WHERE id=?", (selected_id,), one=True)
+            
+            with st.expander("✏️ Modifier les détails du bon"):
+                with st.form("edit_bon_form"):
+                    new_date = st.date_input("Date Bon", value=datetime.strptime(b_data["date_bon"], "%Y-%m-%d").date())
+                    if b_data["type"] == "BE":
+                        new_fourn = st.selectbox("Fournisseur", active_names("fournisseurs"), index=0)
+                        new_lieu = st.text_input("Lieu Livraison", value=b_data["lieu_livraison"] or "")
+                        submit_edit = st.form_submit_button("Mettre à jour")
+                        if submit_edit:
+                            execute("UPDATE bons SET date_bon=?, fournisseur=?, lieu_livraison=? WHERE id=?", (str(new_date), new_fourn, new_lieu, selected_id))
+                            st.success("Bon mis à jour !")
+                            st.rerun()
+                    else:
+                        new_eq = st.selectbox("Équipe", active_names("equipes"), index=0)
+                        new_dest = st.text_input("Destination", value=b_data["destination"] or "")
+                        submit_edit = st.form_submit_button("Mettre à jour")
+                        if submit_edit:
+                            execute("UPDATE bons SET date_bon=?, equipe=?, destination=? WHERE id=?", (str(new_date), new_eq, new_dest, selected_id))
+                            st.success("Bon mis à jour !")
+                            st.rerun()
+
+            if st.button("🚨 Supprimer ce bon (Restaure le stock)", use_container_width=True):
+                # Restauration du stock avant suppression
+                items_to_revert = query("SELECT article_id, quantity FROM bon_items WHERE bon_id=?", (selected_id,))
+                for it in items_to_revert:
+                    curr = current_stock(CLIENT, it["article_id"])
+                    if b_data["type"] == "BE":
+                        set_stock(CLIENT, it["article_id"], curr - it["quantity"])
+                    else:
+                        set_stock(CLIENT, it["article_id"], curr + it["quantity"])
+                
+                execute("DELETE FROM bon_items WHERE bon_id=?", (selected_id,))
+                execute("DELETE FROM bons WHERE id=?", (selected_id,))
+                st.success("Bon supprimé et stock réajusté !")
+                st.rerun()
     else:
         st.info("Aucun bon enregistré pour le moment.")
     st.markdown("</div>", unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# 📁 TAB 5: IMPORT / EXPORT EXCEL (SI AUTORISÉ)
+# ---------------------------------------------------------
+tab_idx = 4
+if can(ROLE, "import"):
+    with tabs[tab_idx]:
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("Importation & Exportation Excel")
 
-# ⚙️ CONFIGURATION
-with t_config:
-    if can(ROLE, "config"):
+        c_exp, c_imp = st.columns(2)
+
+        with c_exp:
+            st.markdown("##### 📤 Export de Données")
+            # Export Stock
+            rows_stk = query("SELECT a.name AS Article, COALESCE(s.quantity,0) AS Quantité FROM articles a LEFT JOIN stock s ON s.article_id=a.id AND s.client=?", (CLIENT,))
+            df_stk_exp = pd.DataFrame([dict(r) for r in rows_stk])
+            
+            output_stk = BytesIO()
+            with pd.ExcelWriter(output_stk, engine='openpyxl') as writer:
+                df_stk_exp.to_excel(writer, index=False, sheet_name='Stock')
+            
+            st.download_button(
+                "📊 Télécharger l'état du stock (.xlsx)",
+                output_stk.getvalue(),
+                file_name=f"Stock_{CLIENT}_{date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            # Modèle d'importation Excel
+            df_model = pd.DataFrame({
+                "Référence": ["REF-001", "REF-002"],
+                "Article": [DEFAULT_ARTICLES[0], DEFAULT_ARTICLES[1]],
+                "Quantité": [10, 5],
+                "Remarque": ["RAS", "Urgent"]
+            })
+            output_mod = BytesIO()
+            with pd.ExcelWriter(output_mod, engine='openpyxl') as writer:
+                df_model.to_excel(writer, index=False, sheet_name='Modele_Import')
+
+            st.download_button(
+                "📑 Télécharger un modèle d'import Excel",
+                output_mod.getvalue(),
+                file_name="Modele_Import_Bon.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        with c_imp:
+            st.markdown("##### 📥 Import massif de Bon via Excel")
+            imp_type = st.radio("Type de bon à créer", ["BE (Entrée)", "BS (Sortie)"], horizontal=True)
+            file_up = st.file_uploader("Fichier Excel (.xlsx)", type=["xlsx"])
+
+            if file_up:
+                try:
+                    df_up = pd.read_excel(file_up)
+                    st.write("Aperçu des données :", df_up.head())
+
+                    if st.button("🚀 Valider l'importation de ce fichier"):
+                        b_type = "BE" if "BE" in imp_type else "BS"
+                        prefix = "BE-IMP" if b_type == "BE" else "BS-IMP"
+                        num_imp = f"{prefix}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+                        bon_id = execute(
+                            "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,created_by) VALUES (?,?,?,?,?,?)",
+                            (b_type, num_imp, CLIENT, str(date.today()), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), CURRENT_USER["username"])
+                        )
+
+                        for _, row in df_up.iterrows():
+                            art_name = str(row["Article"]).strip()
+                            qty_val = int(row["Quantité"])
+                            ref_val = str(row.get("Référence", ""))
+                            rem_val = str(row.get("Remarque", ""))
+
+                            # Insertion article s'il n'existe pas
+                            execute("INSERT OR IGNORE INTO articles (name, active) VALUES (?, 1)", (art_name,))
+                            art_id = article_id_by_name(art_name)
+
+                            execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, ref_val, qty_val, rem_val))
+
+                            curr = current_stock(CLIENT, art_id)
+                            new_qty = curr + qty_val if b_type == "BE" else max(0, curr - qty_val)
+                            set_stock(CLIENT, art_id, new_qty)
+                            add_movement(CLIENT, art_id, b_type, qty_val, num_imp, CURRENT_USER["username"], "Import Excel")
+
+                        st.success("Importation effectuée avec succès !")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Erreur lors de la lecture du fichier : {e}")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+    tab_idx += 1
+
+# ---------------------------------------------------------
+# ⚙️ TAB 6: CONFIGURATION (ADMIN)
+# ---------------------------------------------------------
+if can(ROLE, "config"):
+    with tabs[tab_idx]:
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.subheader("Configuration Système")
-        cat = st.radio("Entité à gérer", ["Articles", "Fournisseurs", "Équipes", "Ressources"], horizontal=True)
-        t_map = {"Articles": "articles", "Fournisseurs": "fournisseurs", "Équipes": "equipes", "Ressources": "resources"}
-        
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            new_val = st.text_input(f"Ajouter dans {cat}")
-            if st.button("Enregistrer"):
-                if new_val:
-                    execute(f"INSERT OR IGNORE INTO {t_map[cat]} (name, active) VALUES (?, 1)", (new_val.strip(),))
-                    st.success("Ajouté !")
-                    st.rerun()
-        with c2:
-            items = query(f"SELECT id, name, active FROM {t_map[cat]} ORDER BY name")
-            if items:
-                st.dataframe(pd.DataFrame([dict(i) for i in items]), use_container_width=True, hide_index=True)
+
+        sub_tab1, sub_tab2 = st.tabs(["📋 Référentiels Stock", "👥 Gestion des Utilisateurs"])
+
+        with sub_tab1:
+            cat = st.radio("Entité à gérer", ["Articles", "Fournisseurs", "Équipes", "Ressources"], horizontal=True)
+            t_map = {"Articles": "articles", "Fournisseurs": "fournisseurs", "Équipes": "equipes", "Ressources": "resources"}
+
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                new_val = st.text_input(f"Ajouter dans {cat}")
+                if st.button("Enregistrer Entité"):
+                    if new_val:
+                        execute(f"INSERT OR IGNORE INTO {t_map[cat]} (name, active) VALUES (?, 1)", (new_val.strip(),))
+                        st.success("Élément ajouté !")
+                        st.rerun()
+            with c2:
+                items = query(f"SELECT id, name, active FROM {t_map[cat]} ORDER BY name")
+                if items:
+                    st.dataframe(pd.DataFrame([dict(i) for i in items]), use_container_width=True, hide_index=True)
+
+        with sub_tab2:
+            st.markdown("##### Utilisateurs enregistrés")
+            u_col1, u_col2 = st.columns([1, 2])
+            with u_col1:
+                with st.form("add_user_form"):
+                    st.markdown("###### Nouvel Utilisateur")
+                    u_username = st.text_input("Identifiant")
+                    u_pass = st.text_input("Mot de passe", type="password")
+                    u_full = st.text_input("Nom Complet")
+                    u_role = st.selectbox("Rôle", ROLES)
+                    if st.form_submit_button("Créer Compte"):
+                        if u_username and u_pass and u_full:
+                            execute("INSERT OR REPLACE INTO users VALUES (?,?,?,?,?)", (u_username, u_pass, u_full, u_role, "Jamais"))
+                            st.success("Utilisateur créé / mis à jour !")
+                            st.rerun()
+            with u_col2:
+                users = query("SELECT username, fullname, role, last_login FROM users")
+                st.dataframe(pd.DataFrame([dict(u) for u in users]), use_container_width=True, hide_index=True)
+
         st.markdown("</div>", unsafe_allow_html=True)
