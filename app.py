@@ -7,7 +7,7 @@ from fpdf import FPDF
 from PIL import Image
 
 # ==========================================
-# CONFIGURATION DE LA PAGE & DESIGN
+# CONFIGURATION DE LA PAGE & DESIGN RESTAURÉ
 # ==========================================
 st.set_page_config(page_title="Gestion Stock MW NOMATIS", layout="wide", initial_sidebar_state="expanded")
 
@@ -27,27 +27,51 @@ def load_image(path):
             return None
     return None
 
-def local_css():
+# Restitution exacte du thème et des styles personnalisés
+def restore_theme():
     st.markdown("""
     <style>
-        /* Couleurs principales: Bleu, Blanc, Vert */
-        .stApp { background-color: #F8F9FA; }
-        h1, h2, h3 { color: #0056b3; }
+        /* Fond global propre */
+        .stApp { background-color: #F4F6F9; }
         
-        /* Bouton Connexion dynamique */
-        .btn-login-rouge button { background-color: #dc3545 !important; color: white !important; font-weight: bold; width: 100%; }
-        .btn-login-vert button { background-color: #28a745 !important; color: white !important; font-weight: bold; width: 100%; }
+        /* Titres Principaux en Bleu NOMATIS */
+        h1, h2, h3 { color: #0B4F6C !important; font-weight: 700; }
         
-        /* Boutons Clients */
-        .btn-orange button { background-color: #FF7900 !important; color: white !important; font-weight: bold; width: 100%; }
-        .btn-inwi button { background-color: #A1006B !important; color: white !important; font-weight: bold; width: 100%; }
-        .btn-zte button { background-color: #005BAC !important; color: white !important; font-weight: bold; width: 100%; }
+        /* Personnalisation du Bouton de Connexion (Formulaire) */
+        div[data-testid="stForm"] {
+            border: 1px solid #DCE1E8;
+            border-radius: 10px;
+            padding: 30px;
+            background-color: #FFFFFF;
+            box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05);
+        }
         
-        .dataframe { font-size: 14px; }
+        /* Bouton dynamique Rouge / Vert */
+        .btn-login-rouge button { 
+            background-color: #D9534F !important; 
+            color: white !important; 
+            font-weight: bold !important; 
+            border-radius: 6px !important;
+            border: none !important;
+            width: 100% !important;
+        }
+        .btn-login-vert button { 
+            background-color: #28A745 !important; 
+            color: white !important; 
+            font-weight: bold !important; 
+            border-radius: 6px !important;
+            border: none !important;
+            width: 100% !important;
+        }
+        
+        /* Boutons d'accès Clients */
+        .btn-orange button { background-color: #FF7900 !important; color: white !important; font-weight: bold; border: none; width: 100%; }
+        .btn-inwi button { background-color: #A1006B !important; color: white !important; font-weight: bold; border: none; width: 100%; }
+        .btn-zte button { background-color: #005BAC !important; color: white !important; font-weight: bold; border: none; width: 100%; }
     </style>
     """, unsafe_allow_html=True)
 
-local_css()
+restore_theme()
 
 # ==========================================
 # BASE DE DONNÉES (JSON local)
@@ -110,7 +134,6 @@ def generate_pdf(bon_data, client):
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
     
-    # En-tête : Logo NOMATIS & Adresse
     logo_nomatis = LOGOS["NOMATIS"]
     if os.path.exists(logo_nomatis):
         try:
@@ -122,7 +145,6 @@ def generate_pdf(bon_data, client):
         pdf.set_font("Arial", 'B', 14)
         pdf.text(10, 15, "NOMATIS")
         
-    # Logo Client
     logo_client = LOGOS.get(client, "")
     if os.path.exists(logo_client):
         try:
@@ -142,13 +164,11 @@ def generate_pdf(bon_data, client):
     pdf.cell(100, 4, "10000", ln=1)
     pdf.ln(8)
     
-    # Titre Central
     pdf.set_font("Arial", 'B', 14)
     titre = "Bon d'entree" if bon_data['type'] == 'BE' else "Bon de sortie"
     pdf.cell(0, 8, titre, ln=1, align='C')
     pdf.ln(4)
     
-    # Tableau Info (Modèle fourni)
     pdf.set_font("Arial", 'B', 8)
     entetes_info = ["Bon de Livraison", "Date", "Fournisseur" if bon_data['type']=='BE' else "Equipe", "Lieu de livraison", "receptione par", "Stock"]
     col_w = [35, 25, 35, 35, 30, 30]
@@ -170,7 +190,6 @@ def generate_pdf(bon_data, client):
         pdf.cell(col_w[i], 7, str(val), border=1, align='C')
     pdf.ln(10)
     
-    # Tableau Articles
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(45, 7, "Référence", border=1, align='C')
     pdf.cell(115, 7, "Désignation", border=1, align='C')
@@ -200,13 +219,15 @@ if not st.session_state.logged_in:
     with col2:
         img_nom = load_image(LOGOS["NOMATIS"])
         if img_nom:
-            st.image(img_nom, width=200)
-        st.title("Gestion Stock MW NOMATIS")
+            st.image(img_nom, width=220)
+        
+        st.markdown("<h1>Gestion Stock MW NOMATIS</h1>", unsafe_allow_html=True)
         
         with st.form("login_form"):
             username = st.text_input("Nom d'utilisateur")
             password = st.text_input("Mot de passe", type="password")
             
+            # Bouton dynamique Rouge/Vert
             btn_class = "btn-login-vert" if username and password else "btn-login-rouge"
             st.markdown(f'<div class="{btn_class}">', unsafe_allow_html=True)
             submitted = st.form_submit_button("SE CONNECTER")
@@ -236,7 +257,7 @@ if st.session_state.client is None:
     with c1:
         img_orange = load_image(LOGOS["ORANGE"])
         if img_orange:
-            st.image(img_orange, height=120)
+            st.image(img_orange, height=100)
         st.markdown('<div class="btn-orange">', unsafe_allow_html=True)
         if st.button("Accès au stock ORANGE", use_container_width=True):
             st.session_state.client = "ORANGE"
@@ -246,7 +267,7 @@ if st.session_state.client is None:
     with c2:
         img_inwi = load_image(LOGOS["INWI"])
         if img_inwi:
-            st.image(img_inwi, height=120)
+            st.image(img_inwi, height=100)
         st.markdown('<div class="btn-inwi">', unsafe_allow_html=True)
         if st.button("Accès au stock INWI", use_container_width=True):
             st.session_state.client = "INWI"
@@ -256,7 +277,7 @@ if st.session_state.client is None:
     with c3:
         img_zte = load_image(LOGOS["ZTE"])
         if img_zte:
-            st.image(img_zte, height=120)
+            st.image(img_zte, height=100)
         st.markdown('<div class="btn-zte">', unsafe_allow_html=True)
         if st.button("Accès au stock ZTE", use_container_width=True):
             st.session_state.client = "ZTE"
