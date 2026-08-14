@@ -237,6 +237,47 @@ def article_ref(designation):
     return ""
 
 
+def next_article_ref():
+    """Génère automatiquement MW-001, MW-002... sans réutiliser un index supprimé."""
+    max_num = 0
+    for article in db.get("articles", []):
+        ref = str(article.get("ref", "")).strip().upper()
+        if ref.startswith("MW-"):
+            try:
+                max_num = max(max_num, int(ref.split("-", 1)[1]))
+            except Exception:
+                pass
+    for transaction in db.get("transactions", []):
+        for item in transaction.get("articles", []):
+            ref = str(item.get("ref", "")).strip().upper()
+            if ref.startswith("MW-"):
+                try:
+                    max_num = max(max_num, int(ref.split("-", 1)[1]))
+                except Exception:
+                    pass
+    return f"MW-{max_num + 1:03d}"
+
+
+ARTICLE_CATEGORIES = {
+    "Sans catégorie": {},
+    "Support": {
+        "dimensions": ["0.3 m", "0.6 m", "1.2 m", "1.8 m"]
+    },
+    "Jarretière": {
+        "types": ["LC/LC", "LC/SC-APC", "LC/SC-UPC", "LC/FC", "FC/FC"],
+        "longueurs": ["3 m", "5 m", "10 m", "30 m", "60 m"],
+    },
+}
+
+
+def build_article_designation(category, dimension="", fibre_type="", longueur="", base_name=""):
+    if category == "Support":
+        return f"Support {dimension}".strip()
+    if category == "Jarretière":
+        return f"Jarretière {fibre_type} {longueur}".strip()
+    return base_name.strip()
+
+
 def generate_bon_id(type_bon):
     """
     Format obligatoire :
@@ -412,6 +453,14 @@ def can_print():
         "coordinateur",
         "coordinatrice",
     }
+
+
+def confirmation(label, key):
+    return st.checkbox(label, key=key)
+
+
+def all_article_remarks_present(articles):
+    return all(str(item.get("remarque", "")).strip() for item in articles)
 
 
 # ============================================================
@@ -1033,7 +1082,11 @@ if st.session_state.client is None:
             type="password",
         )
 
+        confirm_account = confirmation("Je confirme la modification de mon compte.", "confirm_my_account")
         if st.button("Mettre à jour mon compte"):
+            if not confirm_account:
+                st.warning("Veuillez confirmer la modification avant de continuer.")
+                st.stop()
             new_user = new_user.strip()
 
             if not new_user:
@@ -1344,7 +1397,9 @@ if choix_menu == "Bon d'Entrée (BE)":
             )
 
             if add_article:
-                if qte <= 0:
+                if not remarque_article.strip():
+                    st.error("La remarque de l'article est obligatoire.")
+                elif qte <= 0:
                     st.error(
                         "La quantité doit être supérieure à 0."
                     )
@@ -1480,11 +1535,18 @@ if choix_menu == "Bon d'Entrée (BE)":
                 )
 
             with c3:
+                confirm_be_line = confirmation("Confirmer la modification de la ligne.", f"confirm_be_line_{editing_id or 'new'}")
                 if st.button(
                     "Appliquer",
                     key=f"be_apply_{editing_id or 'new'}",
                     use_container_width=True,
                 ):
+                    if not confirm_be_line:
+                        st.warning("Veuillez confirmer la modification de la ligne.")
+                        st.stop()
+                    if not line_remark.strip():
+                        st.error("La remarque de l'article est obligatoire.")
+                        st.stop()
                     working_articles[
                         line_index
                     ]["qte"] = int(line_qty)
@@ -1515,6 +1577,7 @@ if choix_menu == "Bon d'Entrée (BE)":
         st.divider()
 
         if editing:
+            confirm_be_edit = confirmation("Je confirme l'enregistrement des modifications du BE.", f"confirm_be_edit_{editing_id}")
             c1, c2 = st.columns(2)
 
             with c1:
@@ -1523,6 +1586,9 @@ if choix_menu == "Bon d'Entrée (BE)":
                     type="primary",
                     use_container_width=True,
                 ):
+                    if not confirm_be_edit:
+                        st.warning("Veuillez confirmer l'enregistrement des modifications.")
+                        st.stop()
                     if date_be > today():
                         st.error(
                             "La date du BE ne peut pas "
@@ -1541,6 +1607,12 @@ if choix_menu == "Bon d'Entrée (BE)":
 
                         if not valid:
                             st.error(message)
+                        elif not lieu.strip():
+                            st.error("Le lieu de livraison est obligatoire.")
+                        elif not remarque_bon.strip():
+                            st.error("La remarque générale est obligatoire.")
+                        elif not all_article_remarks_present(working_articles):
+                            st.error("La remarque de chaque article est obligatoire.")
                         else:
                             editing["date"] = (
                                 date_be.strftime(
@@ -1599,6 +1671,7 @@ if choix_menu == "Bon d'Entrée (BE)":
                     st.rerun()
 
         else:
+            confirm_be_new = confirmation("Je confirme l'enregistrement définitif du Bon d'Entrée.", "confirm_be_new")
             if st.button(
                 "💾 Enregistrer le Bon d'Entrée",
                 type="primary",
@@ -1622,6 +1695,12 @@ if choix_menu == "Bon d'Entrée (BE)":
 
                     if not valid:
                         st.error(message)
+                    elif not lieu.strip():
+                        st.error("Le lieu de livraison est obligatoire.")
+                    elif not remarque_bon.strip():
+                        st.error("La remarque générale est obligatoire.")
+                    elif not all_article_remarks_present(working_articles):
+                        st.error("La remarque de chaque article est obligatoire.")
                     else:
                         new_be = {
                             "id": generate_bon_id("BE"),
@@ -1891,6 +1970,9 @@ elif choix_menu == "Bon de Sortie (BS)":
             )
 
             if add_article:
+                if not remarque_article.strip():
+                    st.error("La remarque de l'article est obligatoire.")
+                    st.stop()
                 already = sum(
                     safe_int(
                         item.get(
@@ -2054,11 +2136,18 @@ elif choix_menu == "Bon de Sortie (BS)":
                 )
 
             with c3:
+                confirm_bs_line = confirmation("Confirmer la modification de la ligne.", f"confirm_bs_line_{editing_id or 'new'}")
                 if st.button(
                     "Appliquer",
                     key=f"bs_apply_{editing_id or 'new'}",
                     use_container_width=True,
                 ):
+                    if not confirm_bs_line:
+                        st.warning("Veuillez confirmer la modification de la ligne.")
+                        st.stop()
+                    if not line_remark.strip():
+                        st.error("La remarque de l'article est obligatoire.")
+                        st.stop()
                     working_articles[
                         line_index
                     ]["qte"] = int(line_qty)
@@ -2182,6 +2271,7 @@ elif choix_menu == "Bon de Sortie (BS)":
                     st.rerun()
 
         else:
+            confirm_bs_new = confirmation("Je confirme l'enregistrement définitif du Bon de Sortie.", "confirm_bs_new")
             if st.button(
                 "💾 Enregistrer le Bon de Sortie",
                 type="primary",
@@ -2209,6 +2299,12 @@ elif choix_menu == "Bon de Sortie (BS)":
 
                     if not valid:
                         st.error(message)
+                    elif not destination.strip():
+                        st.error("La destination est obligatoire.")
+                    elif not remarque_bon.strip():
+                        st.error("La remarque générale est obligatoire.")
+                    elif not all_article_remarks_present(working_articles):
+                        st.error("La remarque de chaque article est obligatoire.")
                     else:
                         valid_stock, stock_message = (
                             validate_bs_stock(
@@ -2756,6 +2852,7 @@ elif choix_menu == "Historique":
 
                 with c3:
                     if can_edit():
+                        confirm_edit_bon = confirmation("Confirmer la modification de ce bon.", f"confirm_edit_bon_{transaction['id']}")
                         if st.button(
                             "✏️ Modifier",
                             key=(
@@ -2763,6 +2860,9 @@ elif choix_menu == "Historique":
                             ),
                             use_container_width=True,
                         ):
+                            if not confirm_edit_bon:
+                                st.warning("Veuillez confirmer la modification.")
+                                st.stop()
                             st.session_state.editing_transaction_id = (
                                 transaction["id"]
                             )
@@ -2784,6 +2884,7 @@ elif choix_menu == "Historique":
                             st.rerun()
 
                 if can_edit():
+                    confirm_delete_bon = confirmation("Confirmer la suppression définitive de ce bon.", f"confirm_delete_bon_{transaction['id']}")
                     if st.button(
                         "🗑️ Supprimer ce bon",
                         key=(
@@ -2791,6 +2892,9 @@ elif choix_menu == "Historique":
                         ),
                         use_container_width=True,
                     ):
+                        if not confirm_delete_bon:
+                            st.warning("Veuillez confirmer la suppression.")
+                            st.stop()
                         db["transactions"] = [
                             item
                             for item
@@ -3055,12 +3159,16 @@ elif choix_menu == "Configuration":
                     ],
                 )
 
+            st.checkbox("Je confirme la création de cet utilisateur.", key="confirm_create_user")
             create = st.form_submit_button(
                 "Créer l'utilisateur",
                 type="primary",
             )
 
             if create:
+                if not st.session_state.get("confirm_create_user", False):
+                    st.warning("Veuillez confirmer la création de l'utilisateur.")
+                    st.stop()
                 username = username.strip()
 
                 if not username or not password:
@@ -3148,11 +3256,15 @@ elif choix_menu == "Configuration":
                 ),
             )
 
+            st.checkbox("Je confirme la modification de cet utilisateur.", key="confirm_edit_user")
             save_user = st.form_submit_button(
                 "Enregistrer les modifications"
             )
 
             if save_user:
+                if not st.session_state.get("confirm_edit_user", False):
+                    st.warning("Veuillez confirmer la modification.")
+                    st.stop()
                 new_name = new_name.strip()
 
                 if not new_name:
@@ -3201,9 +3313,13 @@ elif choix_menu == "Configuration":
                     st.rerun()
 
         if selected_user != "admin":
+            confirm_delete_user = confirmation("Je confirme la suppression définitive de cet utilisateur.", "confirm_delete_user")
             if st.button(
                 "🗑️ Supprimer l'utilisateur"
             ):
+                if not confirm_delete_user:
+                    st.warning("Veuillez confirmer la suppression.")
+                    st.stop()
                 db["users"].pop(
                     selected_user,
                     None,
@@ -3220,289 +3336,137 @@ elif choix_menu == "Configuration":
     # ARTICLES
     # --------------------------------------------------------
     with tab_articles:
-        st.subheader(
-            "Référentiel Articles"
-        )
+        st.subheader("Référentiel Articles")
 
-        article_rows = [
-            {
-                "Référence": item.get(
-                    "ref",
-                    "",
-                ),
-                "Désignation": item.get(
-                    "designation",
-                    "",
-                ),
-            }
-            for item in db["articles"]
-        ]
+        article_rows = []
+        for item in db["articles"]:
+            article_rows.append({
+                "Index": item.get("ref", ""),
+                "Catégorie": item.get("categorie", "Sans catégorie"),
+                "Type": item.get("type", ""),
+                "Caractéristique": item.get("caracteristique", ""),
+                "Désignation": item.get("designation", ""),
+            })
 
         if article_rows:
-            st.dataframe(
-                pd.DataFrame(article_rows),
-                use_container_width=True,
-                hide_index=True,
-            )
+            st.dataframe(pd.DataFrame(article_rows), use_container_width=True, hide_index=True)
         else:
-            st.info(
-                "Aucun article configuré."
-            )
+            st.info("Aucun article configuré.")
 
-        st.markdown(
-            "### Ajouter un article"
-        )
+        st.markdown("### Ajouter un article")
+        st.caption("L'index est généré automatiquement au format MW-001, MW-002, MW-003...")
 
         with st.form("add_article"):
-            c1, c2 = st.columns(2)
+            category = st.selectbox("Catégorie", list(ARTICLE_CATEGORIES.keys()))
 
-            with c1:
-                ref = st.text_input(
-                    "Référence"
-                )
+            if category == "Sans catégorie":
+                base_name = st.text_input("Désignation", placeholder="Ex. Câble IF ou Clamp")
+                dimension = ""
+                fibre_type = ""
+                longueur = ""
+            elif category == "Support":
+                dimension = st.selectbox("Dimension du support", ARTICLE_CATEGORIES[category]["dimensions"])
+                base_name = ""
+                fibre_type = ""
+                longueur = ""
+            else:
+                fibre_type = st.selectbox("Type de jarretière", ARTICLE_CATEGORIES[category]["types"])
+                longueur = st.selectbox("Longueur", ARTICLE_CATEGORIES[category]["longueurs"])
+                dimension = ""
+                base_name = ""
 
-            with c2:
-                designation = st.text_input(
-                    "Désignation"
-                )
-
-            initial_qty = st.number_input(
-                f"Quantité initiale pour {client}",
-                min_value=0,
-                value=0,
-                step=1,
-            )
-
-            add = st.form_submit_button(
-                "Ajouter Article",
-                type="primary",
-            )
+            initial_qty = st.number_input(f"Quantité initiale pour {client}", min_value=0, value=0, step=1)
+            st.checkbox("Je confirme l'ajout de cet article.", key="confirm_add_article")
+            add = st.form_submit_button("Ajouter l'article", type="primary")
 
             if add:
-                ref = ref.strip()
-                designation = designation.strip()
-
-                duplicate = any(
-                    item.get(
-                        "designation",
-                        "",
-                    ).lower()
-                    == designation.lower()
-                    for item
-                    in db["articles"]
-                )
+                if not st.session_state.get("confirm_add_article", False):
+                    st.warning("Veuillez confirmer l'ajout de l'article.")
+                    st.stop()
+                designation = build_article_designation(category, dimension, fibre_type, longueur, base_name)
+                duplicate = any(a.get("designation", "").strip().lower() == designation.lower() for a in db["articles"])
 
                 if not designation:
-                    st.error(
-                        "La désignation est obligatoire."
-                    )
+                    st.error("La désignation est obligatoire.")
                 elif duplicate:
-                    st.error(
-                        "Cet article existe déjà."
-                    )
+                    st.error("Cet article existe déjà.")
                 else:
+                    new_ref = next_article_ref()
                     db["articles"].append({
-                        "ref": ref,
+                        "ref": new_ref,
                         "designation": designation,
+                        "categorie": category,
+                        "type": fibre_type,
+                        "caracteristique": dimension or longueur,
                     })
 
                     if initial_qty > 0:
                         db["transactions"].append({
-                            "id": (
-                                f"ADJ-INIT-{client}-"
-                                f"{now().strftime('%Y%m%d%H%M%S')}"
-                            ),
+                            "id": f"ADJ-INIT-{client}-{now().strftime('%Y%m%d%H%M%S')}",
                             "type": "ADJ_PLUS",
-                            "date": now().strftime(
-                                "%Y-%m-%d"
-                            ),
-                            "heure_saisie": now().strftime(
-                                "%H:%M:%S"
-                            ),
+                            "date": now().strftime("%Y-%m-%d"),
+                            "heure_saisie": now().strftime("%H:%M:%S"),
                             "client": client,
                             "user": st.session_state.user,
                             "fournisseur_equipe": "Ajustement",
                             "destination": "Stock initial",
-                            "remarque": (
-                                "Quantité initiale"
-                            ),
-                            "articles": [{
-                                "designation": designation,
-                                "qte": int(initial_qty),
-                                "ref": ref,
-                                "remarque": "Stock initial",
-                            }],
+                            "remarque": "Quantité initiale",
+                            "articles": [{"designation": designation, "qte": int(initial_qty), "ref": new_ref, "remarque": "Stock initial"}],
                         })
 
                     save_db(db)
-
-                    st.success(
-                        "Article ajouté."
-                    )
+                    st.success(f"Article {new_ref} ajouté avec succès.")
                     st.rerun()
 
         if db["articles"]:
-            st.markdown(
-                "### Modifier un article"
-            )
+            st.markdown("### Modifier un article")
+            article_labels = [f"{a.get('ref','')} — {a.get('designation','')}" for a in db["articles"]]
+            selected_label = st.selectbox("Article", article_labels, key="selected_article_admin")
+            article_index = article_labels.index(selected_label)
+            current = db["articles"][article_index]
 
-            article_names = [
-                item.get(
-                    "designation"
-                )
-                for item in db["articles"]
-            ]
+            with st.form("edit_article"):
+                st.text_input("Index", value=current.get("ref", ""), disabled=True)
+                new_designation = st.text_input("Désignation", value=current.get("designation", ""))
+                st.caption(f"Catégorie : {current.get('categorie','Sans catégorie')} | Caractéristique : {current.get('caracteristique','')}")
+                st.checkbox("Je confirme la modification de cet article.", key="confirm_edit_article")
+                save_article = st.form_submit_button("Enregistrer les modifications", type="primary")
 
-            selected_article = st.selectbox(
-                "Article",
-                article_names,
-                key="selected_article_admin",
-            )
-
-            article_index = next(
-                (
-                    i
-                    for i, item
-                    in enumerate(db["articles"])
-                    if item.get(
-                        "designation"
-                    ) == selected_article
-                ),
-                None,
-            )
-
-            if article_index is not None:
-                current = db["articles"][
-                    article_index
-                ]
-
-                with st.form("edit_article"):
-                    new_ref = st.text_input(
-                        "Référence",
-                        value=current.get(
-                            "ref",
-                            "",
-                        ),
-                    )
-
-                    new_designation = st.text_input(
-                        "Désignation",
-                        value=current.get(
-                            "designation",
-                            "",
-                        ),
-                    )
-
-                    save_article = st.form_submit_button(
-                        "Enregistrer",
-                        type="primary",
-                    )
-
-                    if save_article:
-                        new_ref = new_ref.strip()
-                        new_designation = (
-                            new_designation.strip()
-                        )
-
-                        duplicate = any(
-                            i != article_index
-                            and item.get(
-                                "designation",
-                                "",
-                            ).lower()
-                            == new_designation.lower()
-                            for i, item
-                            in enumerate(
-                                db["articles"]
-                            )
-                        )
-
-                        if not new_designation:
-                            st.error(
-                                "La désignation est obligatoire."
-                            )
-                        elif duplicate:
-                            st.error(
-                                "Cette désignation existe déjà."
-                            )
-                        else:
-                            old_designation = (
-                                db["articles"][
-                                    article_index
-                                ][
-                                    "designation"
-                                ]
-                            )
-
-                            db["articles"][
-                                article_index
-                            ]["ref"] = new_ref
-
-                            db["articles"][
-                                article_index
-                            ]["designation"] = (
-                                new_designation
-                            )
-
-                            # Conserver l'historique cohérent.
-                            for transaction in db[
-                                "transactions"
-                            ]:
-                                for item in transaction.get(
-                                    "articles",
-                                    [],
-                                ):
-                                    if item.get(
-                                        "designation"
-                                    ) == old_designation:
-                                        item[
-                                            "designation"
-                                        ] = new_designation
-                                        item["ref"] = new_ref
-
-                            save_db(db)
-
-                            st.success(
-                                "Article modifié."
-                            )
-                            st.rerun()
-
-                if st.button(
-                    "🗑️ Supprimer l'article"
-                ):
-                    used_in_history = any(
-                        any(
-                            item.get(
-                                "designation"
-                            )
-                            == selected_article
-                            for item
-                            in transaction.get(
-                                "articles",
-                                [],
-                            )
-                        )
-                        for transaction
-                        in db["transactions"]
-                    )
-
-                    if used_in_history:
-                        st.error(
-                            "Impossible de supprimer cet article : "
-                            "il possède déjà des mouvements historiques. "
-                            "Vous pouvez le modifier."
-                        )
+                if save_article:
+                    if not st.session_state.get("confirm_edit_article", False):
+                        st.warning("Veuillez confirmer la modification de l'article.")
+                        st.stop()
+                    new_designation = new_designation.strip()
+                    duplicate = any(i != article_index and a.get("designation", "").lower() == new_designation.lower() for i, a in enumerate(db["articles"]))
+                    if not new_designation:
+                        st.error("La désignation est obligatoire.")
+                    elif duplicate:
+                        st.error("Cette désignation existe déjà.")
                     else:
-                        db["articles"].pop(
-                            article_index
-                        )
-
+                        old_designation = current.get("designation", "")
+                        current["designation"] = new_designation
+                        for transaction in db["transactions"]:
+                            for item in transaction.get("articles", []):
+                                if item.get("designation") == old_designation:
+                                    item["designation"] = new_designation
+                                    item["ref"] = current.get("ref", "")
                         save_db(db)
-
-                        st.success(
-                            "Article supprimé."
-                        )
+                        st.success("Article modifié.")
                         st.rerun()
+
+            confirm_delete_article = confirmation("Je confirme la suppression définitive de cet article.", "confirm_delete_article")
+            if st.button("🗑️ Supprimer l'article"):
+                if not confirm_delete_article:
+                    st.warning("Veuillez confirmer la suppression de l'article.")
+                    st.stop()
+                used_in_history = any(any(item.get("designation") == current.get("designation") for item in transaction.get("articles", [])) for transaction in db["transactions"])
+                if used_in_history:
+                    st.error("Impossible de supprimer cet article : il possède déjà des mouvements historiques.")
+                else:
+                    db["articles"].pop(article_index)
+                    save_db(db)
+                    st.success("Article supprimé.")
+                    st.rerun()
 
     # --------------------------------------------------------
     # FOURNISSEURS
@@ -3525,11 +3489,15 @@ elif choix_menu == "Configuration":
                 "Nouveau fournisseur"
             )
 
+            st.checkbox("Je confirme l'ajout de ce fournisseur.", key="confirm_add_supplier")
             add_supplier = st.form_submit_button(
                 "Ajouter"
             )
 
             if add_supplier:
+                if not st.session_state.get("confirm_add_supplier", False):
+                    st.warning("Veuillez confirmer l'ajout du fournisseur.")
+                    st.stop()
                 supplier = supplier.strip()
 
                 if not supplier:
@@ -3562,9 +3530,13 @@ elif choix_menu == "Configuration":
                 key="supplier_delete",
             )
 
+            confirm_delete_supplier = confirmation("Je confirme la suppression de ce fournisseur.", "confirm_delete_supplier")
             if st.button(
                 "🗑️ Supprimer le fournisseur"
             ):
+                if not confirm_delete_supplier:
+                    st.warning("Veuillez confirmer la suppression.")
+                    st.stop()
                 db["fournisseurs"].remove(
                     supplier_delete
                 )
@@ -3597,11 +3569,15 @@ elif choix_menu == "Configuration":
                 "Nouvelle équipe"
             )
 
+            st.checkbox("Je confirme l'ajout de cette équipe.", key="confirm_add_team")
             add_team = st.form_submit_button(
                 "Ajouter"
             )
 
             if add_team:
+                if not st.session_state.get("confirm_add_team", False):
+                    st.warning("Veuillez confirmer l'ajout de l'équipe.")
+                    st.stop()
                 team = team.strip()
 
                 if not team:
@@ -3631,9 +3607,13 @@ elif choix_menu == "Configuration":
                 key="team_delete",
             )
 
+            confirm_delete_team = confirmation("Je confirme la suppression de cette équipe.", "confirm_delete_team")
             if st.button(
                 "🗑️ Supprimer l'équipe"
             ):
+                if not confirm_delete_team:
+                    st.warning("Veuillez confirmer la suppression.")
+                    st.stop()
                 db["equipes"].remove(
                     team_delete
                 )
@@ -3690,6 +3670,7 @@ elif choix_menu == "Configuration":
                 reason = st.text_input(
                     "Motif"
                 )
+                st.checkbox("Je confirme l'ajustement manuel du stock.", key="confirm_adjustment")
 
                 apply_adjustment = st.form_submit_button(
                     "Appliquer l'ajustement",
@@ -3697,6 +3678,9 @@ elif choix_menu == "Configuration":
                 )
 
                 if apply_adjustment:
+                    if not st.session_state.get("confirm_adjustment", False):
+                        st.warning("Veuillez confirmer l'ajustement avant de continuer.")
+                        st.stop()
                     if not reason.strip():
                         st.error(
                             "Le motif est obligatoire."
