@@ -1,738 +1,567 @@
-from datetime import datetime, date
-from io import BytesIO
-import os
-import sqlite3
-import pandas as pd
 import streamlit as st
-from PIL import Image, ImageOps
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-)
-from docx import Document
+import pandas as pd
+import datetime
+import json
+import os
+from fpdf import FPDF
+import base64
 
-# =========================================================
-# CONFIGURATION & THÈME LIGHT SAAS MINIMALISTE
-# =========================================================
-st.set_page_config(
-    page_title="NOMATIS — MW Stock Engine",
-    page_icon="📡",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+# ==========================================
+# CONFIGURATION DE LA PAGE & DESIGN
+# ==========================================
+st.set_page_config(page_title="Gestion Stock MW NOMATIS", layout="wide", initial_sidebar_state="expanded")
 
-APP_TITLE = "NOMATIS — MW Stock Engine"
-DB_FILE = "stock_mw.db"
-
-CLIENTS = {
-    "Orange": {"logo": "Orange_logo.svg.webp", "color": "#FF6600"},
-    "Inwi": {"logo": "Logo INWI.jpg", "color": "#A1006B"},
-    "ZTE": {"logo": "Logo ZTE.jpg", "color": "#005BAC"},
-}
-
-ROLES = ["admin", "magasinier", "coordinateur", "coordinatrice"]
-DEFAULT_ARTICLES = ["Câble IF", "Câble RJ45", "Support 0.3 m", "Support 0.6 m", "ODU 18GHz", "Antenne 0.6m"]
-DEFAULT_FOURNISSEURS = ["NEC", "ZTE", "Intégral", "FO Connect"]
-DEFAULT_EQUIPES = ["Nabil Team", "Yassine Team", "Issam Team"]
-DEFAULT_RESOURCES = ["Nabil", "Yassine", "Issam"]
-
-PERMISSIONS = {
-    "admin": {"be", "bs", "stock", "edit", "config"},
-    "magasinier": {"be", "bs", "stock", "edit"},
-    "coordinateur": {"stock", "print"},
-    "coordinatrice": {"stock", "print"},
-}
-
-# Injection CSS — Style SaaS Lumineux & Épuré
-st.markdown(
-    """
+# CSS Personnalisé (Couleurs, Boutons)
+def local_css():
+    st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-        html, body, [class*="css"] {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-color: #F8FAFC !important;
-            color: #0F172A !important;
-        }
-
-        .stApp {
-            background-color: #F8FAFC;
-        }
-
-        /* En-tête principal */
-        .main-header {
-            background: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-radius: 12px;
-            padding: 20px 28px;
-            margin-bottom: 24px;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-        }
-
-        .main-title {
-            color: #0F172A !important;
-            font-weight: 700;
-            font-size: 24px;
-            margin: 0;
-        }
-
-        .subtitle {
-            color: #64748B !important;
-            font-size: 14px;
-            margin-top: 4px;
-        }
-
-        /* Cartes Blanches Épurées */
-        .glass-card {
-            background: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-        }
-
-        /* Boutons (Bleu Indigo Moderne) */
-        .stButton > button, div[data-testid="stFormSubmitButton"] > button {
-            background-color: #2563EB !important;
-            color: #FFFFFF !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            border: none !important;
-            padding: 10px 20px !important;
-            transition: all 0.2s ease !important;
-            min-height: 42px !important;
-        }
-
-        .stButton > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
-            background-color: #1D4ED8 !important;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2) !important;
-        }
-
-        /* Champs de Saisie (Inputs) */
-        .stTextInput input, .stSelectbox div[data-baseweb="select"], .stNumberInput input {
-            background-color: #FFFFFF !important;
-            color: #0F172A !important;
-            border: 1px solid #CBD5E1 !important;
-            border-radius: 8px !important;
-        }
-
-        .stTextInput input:focus, .stNumberInput input:focus {
-            border-color: #2563EB !important;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
-        }
-
-        /* Onglets / Tabs */
-        div[data-baseweb="tab-list"] {
-            gap: 8px;
-            background-color: #F1F5F9;
-            padding: 6px;
-            border-radius: 10px;
-            border: 1px solid #E2E8F0;
-        }
-
-        button[data-baseweb="tab"] {
-            border-radius: 6px !important;
-            font-weight: 500 !important;
-            color: #64748B !important;
-        }
-
-        button[aria-selected="true"] {
-            background-color: #FFFFFF !important;
-            color: #0F172A !important;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
-        }
-
-        /* Métriques */
-        [data-testid="stMetricValue"] {
-            color: #2563EB !important;
-            font-weight: 700 !important;
-        }
+        /* Couleurs principales: Bleu, Blanc, Vert */
+        .stApp { background-color: #F8F9FA; }
+        h1, h2, h3 { color: #0056b3; }
+        
+        /* Bouton Connexion dynamique */
+        .btn-login-rouge button { background-color: #dc3545 !important; color: white !important; font-weight: bold; }
+        .btn-login-vert button { background-color: #28a745 !important; color: white !important; font-weight: bold; }
+        
+        /* Boutons Clients */
+        .btn-orange button { background-color: #FF7900 !important; color: white !important; font-weight: bold; }
+        .btn-inwi button { background-color: #E30613 !important; color: white !important; font-weight: bold; }
+        .btn-zte button { background-color: #005A9C !important; color: white !important; font-weight: bold; }
+        
+        .dataframe { font-size: 14px; }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+    """, unsafe_allow_html=True)
 
+local_css()
 
-# =========================================================
-# BASE DE DONNÉES (SQLite)
-# =========================================================
-def get_conn():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
+# ==========================================
+# BASE DE DONNÉES (Simulation via JSON local)
+# ==========================================
+DB_FILE = "database.json"
 
 def init_db():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password TEXT NOT NULL,
-            fullname TEXT NOT NULL,
-            role TEXT NOT NULL,
-            last_login TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS articles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS fournisseurs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS equipes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS resources (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1
-        );
-
-        CREATE TABLE IF NOT EXISTS stock (
-            client TEXT NOT NULL,
-            article_id INTEGER NOT NULL,
-            quantity INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (client, article_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS bons (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            number TEXT NOT NULL,
-            client TEXT NOT NULL,
-            date_bon TEXT NOT NULL,
-            datetime_saisie TEXT NOT NULL,
-            fournisseur TEXT,
-            lieu_livraison TEXT,
-            receptionne_par TEXT,
-            equipe TEXT,
-            resource TEXT,
-            destination TEXT,
-            created_by TEXT NOT NULL,
-            UNIQUE(type, number, client)
-        );
-
-        CREATE TABLE IF NOT EXISTS bon_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bon_id INTEGER NOT NULL,
-            article_id INTEGER NOT NULL,
-            reference TEXT,
-            quantity INTEGER NOT NULL,
-            remarque TEXT,
-            FOREIGN KEY(bon_id) REFERENCES bons(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS movements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client TEXT NOT NULL,
-            article_id INTEGER NOT NULL,
-            movement_type TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            reference_bon TEXT,
-            username TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            comment TEXT
-        );
-        """
-    )
-
-    cur.execute("SELECT COUNT(*) FROM users")
-    if cur.fetchone()[0] == 0:
-        cur.execute(
-            "INSERT INTO users VALUES (?,?,?,?,?)",
-            ("admin", "admin123", "Administrateur Système", "admin", "Jamais"),
-        )
-        cur.execute(
-            "INSERT INTO users VALUES (?,?,?,?,?)",
-            ("magasinier", "123", "Magasinier Principal", "magasinier", "Jamais"),
-        )
-
-    for name in DEFAULT_ARTICLES:
-        cur.execute("INSERT OR IGNORE INTO articles(name,active) VALUES(?,1)", (name,))
-    for name in DEFAULT_FOURNISSEURS:
-        cur.execute("INSERT OR IGNORE INTO fournisseurs(name,active) VALUES(?,1)", (name,))
-    for name in DEFAULT_EQUIPES:
-        cur.execute("INSERT OR IGNORE INTO equipes(name,active) VALUES(?,1)", (name,))
-    for name in DEFAULT_RESOURCES:
-        cur.execute("INSERT OR IGNORE INTO resources(name,active) VALUES(?,1)", (name,))
-
-    conn.commit()
-    conn.close()
-
-
-init_db()
-
-
-# =========================================================
-# UTILITAIRES & FONCTIONS
-# =========================================================
-def query(sql, params=(), one=False):
-    conn = get_conn()
-    cur = conn.execute(sql, params)
-    rows = cur.fetchall()
-    conn.close()
-    return rows[0] if one and rows else (None if one else rows)
-
-
-def execute(sql, params=()):
-    conn = get_conn()
-    cur = conn.execute(sql, params)
-    conn.commit()
-    last_id = cur.lastrowid
-    conn.close()
-    return last_id
-
-
-def active_names(table):
-    rows = query(f"SELECT name FROM {table} WHERE active=1 ORDER BY name")
-    return [r["name"] for r in rows]
-
-
-def article_id_by_name(name):
-    row = query("SELECT id FROM articles WHERE name=?", (name,), one=True)
-    return row["id"] if row else None
-
-
-def current_stock(client, article_id):
-    row = query("SELECT quantity FROM stock WHERE client=? AND article_id=?", (client, article_id), one=True)
-    return int(row["quantity"]) if row else 0
-
-
-def set_stock(client, article_id, quantity):
-    execute(
-        """
-        INSERT INTO stock(client,article_id,quantity) VALUES(?,?,?)
-        ON CONFLICT(client,article_id) DO UPDATE SET quantity=excluded.quantity
-        """,
-        (client, article_id, int(quantity)),
-    )
-
-
-def add_movement(client, article_id, m_type, qty, ref_bon, user, comment=""):
-    execute(
-        """
-        INSERT INTO movements(client,article_id,movement_type,quantity,reference_bon,username,created_at,comment)
-        VALUES(?,?,?,?,?,?,?,?)
-        """,
-        (client, article_id, m_type, int(qty), ref_bon, user, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), comment),
-    )
-
-
-def user_info(username):
-    return query("SELECT * FROM users WHERE username=?", (username,), one=True)
-
-
-def can(role, permission):
-    return permission in PERMISSIONS.get(role, set())
-
-
-def normalized_logo(path, size=(300, 120)):
-    if not os.path.exists(path):
-        return None
-    try:
-        img = Image.open(path).convert("RGB")
-        canvas = Image.new("RGB", size, "#FFFFFF")
-        contained = ImageOps.contain(img, size)
-        x = (size[0] - contained.width) // 2
-        y = (size[1] - contained.height) // 2
-        canvas.paste(contained, (x, y))
-        return canvas
-    except Exception:
-        return None
-
-
-# =========================================================
-# GENERATEURS DE DOCUMENTS (PDF & DOCX)
-# =========================================================
-def generate_pdf(bon_id):
-    bon = query("SELECT * FROM bons WHERE id=?", (bon_id,), one=True)
-    items = query(
-        "SELECT bi.*, a.name AS article FROM bon_items bi JOIN articles a ON a.id=bi.article_id WHERE bi.bon_id=?",
-        (bon_id,),
-    )
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15 * mm, leftMargin=15 * mm, topMargin=15 * mm, bottomMargin=15 * mm)
-    styles = getSampleStyleSheet()
-    story = []
-
-    title = "BON D'ENTRÉE" if bon["type"] == "BE" else "BON DE SORTIE"
-    story.append(Paragraph(f"<font size=18 color='#0F172A'><b>{title}</b></font>", styles["Title"]))
-    story.append(Spacer(1, 10))
-
-    if bon["type"] == "BE":
-        info = [
-            ["N° Bon", bon["number"], "Date", bon["date_bon"]],
-            ["Fournisseur", bon["fournisseur"] or "", "Lieu Livraison", bon["lieu_livraison"] or ""],
-            ["Réceptionné par", bon["receptionne_par"] or "", "Client", bon["client"]],
-        ]
+    if not os.path.exists(DB_FILE):
+        db = {
+            "users": {
+                "admin": {"password": "admin", "role": "admin", "last_login": ""}
+            },
+            "articles": [], # {ref, designation}
+            "fournisseurs": ["NEC", "ZTE", "Intégral", "FO connect"],
+            "equipes": ["Nabil Team", "Yassine Team", "Issa Team"],
+            "transactions": [] # {id, type (BE/BS/ADJ), date, client, user, fournisseur_equipe, destination, articles: [{ref, designation, qte, remarque}]}
+        }
+        save_db(db)
+        return db
     else:
-        info = [
-            ["N° Bon", bon["number"], "Date", bon["date_bon"]],
-            ["Équipe", bon["equipe"] or "", "Ressource", bon["resource"] or ""],
-            ["Destination", bon["destination"] or "", "Client", bon["client"]],
-        ]
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-    info_table = Table(info, colWidths=[35 * mm, 55 * mm, 35 * mm, 55 * mm])
-    info_table.setStyle(
-        TableStyle(
-            [
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F1F5F9")),
-                ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#F1F5F9")),
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-                ("PADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    story.append(info_table)
-    story.append(Spacer(1, 15))
+def save_db(db):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=4)
 
-    data = [["Référence", "Désignation Article", "Quantité", "Remarque"]]
-    for item in items:
-        data.append([item["reference"] or "-", item["article"], str(item["quantity"]), item["remarque"] or "-"])
+db = init_db()
 
-    items_table = Table(data, colWidths=[35 * mm, 70 * mm, 25 * mm, 50 * mm])
-    items_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563EB")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-                ("ALIGN", (2, 1), (2, -1), "CENTER"),
-                ("PADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
-    )
-    story.append(items_table)
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
+# ==========================================
+# FONCTIONS MÉTIERS & STOCK
+# ==========================================
+def get_stock(client):
+    stock = {}
+    # Initialiser tous les articles à 0
+    for art in db["articles"]:
+        stock[art["designation"]] = {"ref": art["ref"], "qte": 0}
+        
+    for tr in db["transactions"]:
+        if tr["client"] == client:
+            for item in tr["articles"]:
+                nom = item["designation"]
+                qte = item["qte"]
+                if nom not in stock:
+                    stock[nom] = {"ref": item.get("ref", ""), "qte": 0}
+                if tr["type"] in ["BE", "ADJ_PLUS"]:
+                    stock[nom]["qte"] += qte
+                elif tr["type"] in ["BS", "ADJ_MOINS"]:
+                    stock[nom]["qte"] -= qte
+    return stock
 
+def generate_id(type_bon):
+    today = datetime.datetime.now().strftime("%Y%m%d")
+    count = sum(1 for t in db["transactions"] if t["type"] == type_bon and today in t["id"])
+    return f"MW-{type_bon}-{today}-{(count + 1):02d}"
 
-def generate_docx(bon_id):
-    bon = query("SELECT * FROM bons WHERE id=?", (bon_id,), one=True)
-    items = query(
-        "SELECT bi.*, a.name AS article FROM bon_items bi JOIN articles a ON a.id=bi.article_id WHERE bi.bon_id=?",
-        (bon_id,),
-    )
-    doc = Document()
-    doc.add_heading(f"BON DE {'ENTRÉE' if bon['type']=='BE' else 'SORTIE'} - {bon['number']}", level=1)
-    p = doc.add_paragraph()
-    p.add_run(f"Client : {bon['client']}\nDate : {bon['date_bon']}\nCréé par : {bon['created_by']}")
+# ==========================================
+# GÉNÉRATION DU PDF (Le modèle strict)
+# ==========================================
+def generate_pdf(bon_data, client):
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.add_page()
+    pdf.set_font("Arial", size=10)
+    
+    # En-tête : Logos et Adresse
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(100, 8, "NOMATIS", ln=0)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(90, 8, f"Client : {client.upper()}", ln=1, align='R')
+    
+    pdf.set_font("Arial", size=9)
+    pdf.cell(100, 5, "32 Rue Al Hatim", ln=1)
+    pdf.cell(100, 5, "Les Orangers", ln=1)
+    pdf.cell(100, 5, "10000", ln=1)
+    pdf.ln(10)
+    
+    # Titre Central
+    pdf.set_font("Arial", 'B', 16)
+    titre = "Bon d'Entrée" if bon_data['type'] == 'BE' else "Bon de Sortie"
+    pdf.cell(0, 10, titre, ln=1, align='C')
+    pdf.ln(5)
+    
+    # Tableau Info Globales
+    pdf.set_font("Arial", 'B', 8)
+    entetes_info = ["N° Bon", "Date", "Fournisseur/Equipe", "Lieu/Dest", "Par", "Stock"]
+    col_widths_info = [35, 25, 40, 40, 30, 20]
+    
+    for i, entete in enumerate(entetes_info):
+        pdf.cell(col_widths_info[i], 8, entete, border=1, align='C')
+    pdf.ln()
+    
+    pdf.set_font("Arial", size=8)
+    valeurs_info = [
+        bon_data['id'],
+        bon_data['date'],
+        bon_data['fournisseur_equipe'],
+        bon_data['destination'],
+        bon_data['user'],
+        client
+    ]
+    for i, val in enumerate(valeurs_info):
+        pdf.cell(col_widths_info[i], 8, str(val), border=1, align='C')
+    pdf.ln(10)
+    
+    # Tableau Articles
+    pdf.set_font("Arial", 'B', 9)
+    pdf.cell(40, 8, "Référence", border=1, align='C')
+    pdf.cell(90, 8, "Désignation", border=1, align='C')
+    pdf.cell(30, 8, "Qté", border=1, align='C')
+    pdf.cell(30, 8, "Remarque", border=1, align='C')
+    pdf.ln()
+    
+    pdf.set_font("Arial", size=9)
+    for art in bon_data['articles']:
+        pdf.cell(40, 8, str(art.get('ref', '')), border=1, align='C')
+        pdf.cell(90, 8, str(art['designation']), border=1)
+        pdf.cell(30, 8, str(art['qte']), border=1, align='C')
+        pdf.cell(30, 8, str(art.get('remarque', '')), border=1)
+        pdf.ln()
 
-    table = doc.add_table(rows=1, cols=4)
-    table.style = "Table Grid"
-    hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = "Référence"
-    hdr_cells[1].text = "Article"
-    hdr_cells[2].text = "Quantité"
-    hdr_cells[3].text = "Remarque"
+    # Footer Signatures
+    pdf.ln(20)
+    pdf.cell(95, 10, "Signature Magasinier :", ln=0)
+    pdf.cell(95, 10, "Signature Réceptionnaire / Livreur :", ln=1)
 
-    for item in items:
-        row_cells = table.add_row().cells
-        row_cells[0].text = item["reference"] or ""
-        row_cells[1].text = item["article"]
-        row_cells[2].text = str(item["quantity"])
-        row_cells[3].text = item["remarque"] or ""
+    # Sortie
+    return pdf.output(dest='S').encode('latin-1')
 
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
-# =========================================================
-# ETAT SESSION & AUTHENTIFICATION
-# =========================================================
+# ==========================================
+# 1. PAGE DE CONNEXION
+# ==========================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-if "current_user" not in st.session_state:
-    st.session_state.current_user = None
-if "selected_client" not in st.session_state:
-    st.session_state.selected_client = None
-if "temp_be_items" not in st.session_state:
-    st.session_state.temp_be_items = []
-if "temp_bs_items" not in st.session_state:
-    st.session_state.temp_bs_items = []
-
-
-def login_screen():
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    _, col, _ = st.columns([1, 1.8, 1])
-    with col:
-        st.markdown(
-            """
-            <div class="glass-card" style="text-align: center;">
-                <h1 style="color: #2563EB; margin-bottom: 0px; font-weight: 800;">NOMATIS</h1>
-                <p style="color: #64748B; font-size: 14px;">Plateforme de Gestion de Stock Microwave</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        with st.form("login_form"):
-            st.markdown("##### Connexion Espace Sécurisé")
-            username = st.text_input("Identifiant")
-            password = st.text_input("Mot de passe", type="password")
-            submit = st.form_submit_button("SE CONNECTER", use_container_width=True)
-
-            if submit:
-                user = user_info(username)
-                if user and user["password"] == password:
-                    execute("UPDATE users SET last_login=? WHERE username=?", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), username))
-                    st.session_state.logged_in = True
-                    st.session_state.current_user = username
-                    st.rerun()
-                else:
-                    st.error("Identifiants invalides.")
-
+    st.session_state.user = None
+    st.session_state.role = None
+    st.session_state.client = None
 
 if not st.session_state.logged_in:
-    login_screen()
-    st.stop()
-
-CURRENT_USER = user_info(st.session_state.current_user)
-ROLE = CURRENT_USER["role"]
-
-
-# =========================================================
-# SELECTION DU CLIENT
-# =========================================================
-if not st.session_state.selected_client:
-    st.markdown(
-        """
-        <div class="main-header">
-            <div class="main-title">Espaces Clients</div>
-            <div class="subtitle">Sélectionnez le compte client pour accéder au stock dédié</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    cols = st.columns(3)
-    for idx, (client, info) in enumerate(CLIENTS.items()):
-        with cols[idx]:
-            st.markdown(f'<div class="glass-card" style="border-top: 4px solid {info["color"]};">', unsafe_allow_html=True)
-            logo = normalized_logo(info["logo"])
-            if logo:
-                st.image(logo, use_container_width=True)
-            else:
-                st.markdown(f"<h2 style='text-align:center; color:{info['color']}'>{client}</h2>", unsafe_allow_html=True)
-
-            st.markdown(f"<h3 style='text-align:center; margin-top: 10px;'>{client}</h3>", unsafe_allow_html=True)
-            if st.button(f"Ouvrir Espace {client}", key=f"select_{client}", use_container_width=True):
-                st.session_state.selected_client = client
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()
-
-CLIENT = st.session_state.selected_client
-
-# =========================================================
-# DASHBOARD / APPLICATION APRES LOGIN & CLIENT
-# =========================================================
-h1, h2 = st.columns([3, 1])
-with h1:
-    st.markdown(
-        f"""
-        <div class="main-header">
-            <div class="main-title">NOMATIS — {CLIENT}</div>
-            <div class="subtitle">Utilisateur : {CURRENT_USER['fullname']} ({ROLE.upper()})</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-with h2:
-    if st.button("🔄 Changer Client", use_container_width=True):
-        st.session_state.selected_client = None
-        st.rerun()
-    if st.button("🚪 Déconnexion", use_container_width=True):
-        st.session_state.logged_in = False
-        st.session_state.selected_client = None
-        st.rerun()
-
-t_be, t_bs, t_stock, t_mods, t_config = st.tabs(
-    ["📥 Bon d'Entrée (BE)", "📤 Bon de Sortie (BS)", "📊 État du Stock", "✏️ Modification / Impression", "⚙️ Configuration"]
-)
-
-# 📥 BE SECTION
-with t_be:
-    if can(ROLE, "be"):
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.subheader("Nouveau Bon d'Entrée")
-        c1, c2, c3 = st.columns(3)
-        date_be = c1.date_input("Date Bon", value=date.today(), key="be_d")
-        num_be = c2.text_input("N° BE", value=f"BE-{date.today().strftime('%Y%m%d')}-01")
-        fournisseur = c3.selectbox("Fournisseur", active_names("fournisseurs"))
-        lieu = st.text_input("Lieu de Livraison", value="Magasin Principal NOMATIS")
-
-        st.markdown("---")
-        st.markdown("##### Ajouter des éléments")
-        r1, r2, r3, r4 = st.columns([2, 3, 1.5, 3])
-        ref = r1.text_input("Référence", key="be_ref")
-        art = r2.selectbox("Article", active_names("articles"), key="be_art")
-        qty = r3.number_input("Qté", min_value=1, value=1, key="be_qty")
-        rem = r4.text_input("Remarque", key="be_rem")
-
-        if st.button("➕ Ajouter la ligne"):
-            st.session_state.temp_be_items.append({"ref": ref, "art": art, "qty": qty, "rem": rem})
-
-        if st.session_state.temp_be_items:
-            st.table(pd.DataFrame(st.session_state.temp_be_items))
-            if st.button("💾 Valider et Enregistrer le BE"):
-                bon_id = execute(
-                    "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,fournisseur,lieu_livraison,receptionne_par,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
-                    ("BE", num_be, CLIENT, str(date_be), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), fournisseur, lieu, CURRENT_USER["fullname"], CURRENT_USER["username"]),
-                )
-                for item in st.session_state.temp_be_items:
-                    art_id = article_id_by_name(item["art"])
-                    execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
-                    set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) + item["qty"])
-                    add_movement(CLIENT, art_id, "BE", item["qty"], num_be, CURRENT_USER["username"], item["rem"])
-                st.session_state.temp_be_items = []
-                st.success("BE enregistré avec succès !")
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-
-# 📤 BS SECTION
-with t_bs:
-    if can(ROLE, "bs"):
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.subheader("Nouveau Bon de Sortie")
-        c1, c2, c3 = st.columns(3)
-        date_bs = c1.date_input("Date Bon", value=date.today(), key="bs_d")
-        num_bs = c2.text_input("N° BS", value=f"BS-{date.today().strftime('%Y%m%d')}-01")
-        equipe = c3.selectbox("Équipe Destination", active_names("equipes"))
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.image("https://via.placeholder.com/150x50/FFFFFF/0056b3?text=NOMATIS", width=150) # Placeholder logo
+        st.title("Gestion Stock MW NOMATIS")
         
-        c4, c5 = st.columns(2)
-        resource = c4.selectbox("Ressource / Technicien", active_names("resources"))
-        destination = c5.text_input("Destination / Site", value="Site Telecom")
-
-        st.markdown("---")
-        st.markdown("##### Sélection matériel")
-        r1, r2, r3, r4 = st.columns([2, 3, 1.5, 3])
-        ref = r1.text_input("Référence", key="bs_ref")
-        art = r2.selectbox("Article", active_names("articles"), key="bs_art")
-        qty = r3.number_input("Qté", min_value=1, value=1, key="bs_qty")
-        rem = r4.text_input("Remarque", key="bs_rem")
-
-        if st.button("➕ Ajouter au BS"):
-            art_id = article_id_by_name(art)
-            stk_dispo = current_stock(CLIENT, art_id)
-            if qty > stk_dispo:
-                st.error(f"Stock insuffisant ! Disponible : {stk_dispo}")
-            else:
-                st.session_state.temp_bs_items.append({"ref": ref, "art": art, "qty": qty, "rem": rem})
-
-        if st.session_state.temp_bs_items:
-            st.table(pd.DataFrame(st.session_state.temp_bs_items))
-            if st.button("💾 Valider et Enregistrer le BS"):
-                bon_id = execute(
-                    "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,equipe,resource,destination,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
-                    ("BS", num_bs, CLIENT, str(date_bs), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), equipe, resource, destination, CURRENT_USER["username"]),
-                )
-                for item in st.session_state.temp_bs_items:
-                    art_id = article_id_by_name(item["art"])
-                    execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
-                    set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) - item["qty"])
-                    add_movement(CLIENT, art_id, "BS", item["qty"], num_bs, CURRENT_USER["username"], item["rem"])
-                st.session_state.temp_bs_items = []
-                st.success("BS enregistré avec succès !")
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-
-# 📊 STOCK SECTION
-with t_stock:
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.subheader(f"État du Stock en Temps Réel — {CLIENT}")
-
-    rows = query(
-        """
-        SELECT a.name AS Article, COALESCE(s.quantity, 0) AS Stock
-        FROM articles a
-        LEFT JOIN stock s ON s.article_id = a.id AND s.client = ?
-        WHERE a.active = 1 ORDER BY a.name
-        """,
-        (CLIENT,),
-    )
-    df_stock = pd.DataFrame([dict(r) for r in rows])
-
-    if not df_stock.empty:
-        c1, c2 = st.columns(2)
-        c1.metric("Articles Référencés", len(df_stock))
-        c2.metric("Total Unités en Stock", int(df_stock["Stock"].sum()))
-        st.dataframe(df_stock, use_container_width=True, hide_index=True)
-
-    st.markdown("### Historique des Mouvements")
-    movs = query(
-        """
-        SELECT m.created_at AS Date, m.movement_type AS Type, m.reference_bon AS Bon,
-               a.name AS Article, m.quantity AS Quantité, m.username AS Opérateur
-        FROM movements m JOIN articles a ON a.id = m.article_id
-        WHERE m.client = ? ORDER BY m.id DESC
-        """,
-        (CLIENT,),
-    )
-    if movs:
-        st.dataframe(pd.DataFrame([dict(m) for m in movs]), use_container_width=True, hide_index=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ✏️ MODIFICATION & IMPRESSION
-with t_mods:
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.subheader("Consultation & Impression")
-    bons = query("SELECT * FROM bons WHERE client=? ORDER BY id DESC", (CLIENT,))
-    if bons:
-        opts = [f"{b['type']} - {b['number']} ({b['date_bon']}) - ID:{b['id']}" for b in bons]
-        sel = st.selectbox("Sélectionner un Bon", opts)
-        selected_id = int(sel.split("ID:")[1])
-
-        c1, c2 = st.columns(2)
-        with c1:
-            pdf_b = generate_pdf(selected_id)
-            st.download_button("📄 Télécharger en PDF", pdf_b, file_name=f"Bon_{selected_id}.pdf", mime="application/pdf", use_container_width=True)
-        with c2:
-            docx_b = generate_docx(selected_id)
-            st.download_button("📝 Télécharger en Word (.docx)", docx_b, file_name=f"Bon_{selected_id}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
-    else:
-        st.info("Aucun bon enregistré pour le moment.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ⚙️ CONFIGURATION
-with t_config:
-    if can(ROLE, "config"):
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.subheader("Configuration Système")
-        cat = st.radio("Entité à gérer", ["Articles", "Fournisseurs", "Équipes", "Ressources"], horizontal=True)
-        t_map = {"Articles": "articles", "Fournisseurs": "fournisseurs", "Équipes": "equipes", "Ressources": "resources"}
-        
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            new_val = st.text_input(f"Ajouter dans {cat}")
-            if st.button("Enregistrer"):
-                if new_val:
-                    execute(f"INSERT OR IGNORE INTO {t_map[cat]} (name, active) VALUES (?, 1)", (new_val.strip(),))
-                    st.success("Ajouté !")
+        with st.form("login_form"):
+            username = st.text_input("Nom d'utilisateur")
+            password = st.text_input("Mot de passe", type="password")
+            
+            # CSS du bouton selon la saisie (Rouge -> Vert)
+            btn_class = "btn-login-vert" if username and password else "btn-login-rouge"
+            st.markdown(f'<div class="{btn_class}">', unsafe_allow_html=True)
+            submitted = st.form_submit_button("SE CONNECTER")
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            if submitted:
+                if username in db["users"] and db["users"][username]["password"] == password:
+                    st.session_state.logged_in = True
+                    st.session_state.user = username
+                    st.session_state.role = db["users"][username]["role"]
+                    # MAJ Date connexion
+                    db["users"][username]["last_login"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    save_db(db)
+                    st.success("Accès validé !")
                     st.rerun()
+                else:
+                    st.error("Identifiants incorrects")
+    st.stop()
+
+# ==========================================
+# 2. SÉLECTION DU CLIENT
+# ==========================================
+if st.session_state.client is None:
+    st.title(f"Bienvenue, {st.session_state.user} !")
+    st.subheader("Sélectionnez l'espace client :")
+    
+    c1, c2, c3 = st.columns(3)
+    
+    with c1:
+        st.image("https://via.placeholder.com/200x100/FF7900/FFFFFF?text=ORANGE", use_container_width=True)
+        st.markdown('<div class="btn-orange">', unsafe_allow_html=True)
+        if st.button("Accès au stock ORANGE", use_container_width=True):
+            st.session_state.client = "ORANGE"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+            
+    with c2:
+        st.image("https://via.placeholder.com/200x100/E30613/FFFFFF?text=INWI", use_container_width=True)
+        st.markdown('<div class="btn-inwi">', unsafe_allow_html=True)
+        if st.button("Accès au stock INWI", use_container_width=True):
+            st.session_state.client = "INWI"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+            
+    with c3:
+        st.image("https://via.placeholder.com/200x100/005A9C/FFFFFF?text=ZTE", use_container_width=True)
+        st.markdown('<div class="btn-zte">', unsafe_allow_html=True)
+        if st.button("Accès au stock ZTE", use_container_width=True):
+            st.session_state.client = "ZTE"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    st.divider()
+    st.write("Espace personnel :")
+    with st.expander("Modifier mes informations"):
+        new_user = st.text_input("Nouveau nom", value=st.session_state.user)
+        new_pass = st.text_input("Nouveau mot de passe", type="password")
+        if st.button("Mettre à jour mon profil"):
+            if new_user and new_user != st.session_state.user:
+                db["users"][new_user] = db["users"].pop(st.session_state.user)
+                st.session_state.user = new_user
+            if new_pass:
+                db["users"][st.session_state.user]["password"] = new_pass
+            save_db(db)
+            st.success("Profil mis à jour !")
+    
+    if st.button("Se déconnecter"):
+        st.session_state.clear()
+        st.rerun()
+    st.stop()
+
+# ==========================================
+# 3. APPLICATION PRINCIPALE (5 Rubriques)
+# ==========================================
+client = st.session_state.client
+role = st.session_state.role
+
+st.sidebar.image("https://via.placeholder.com/150x50/FFFFFF/0056b3?text=NOMATIS")
+st.sidebar.title(f"Stock {client}")
+st.sidebar.write(f"Utilisateur : **{st.session_state.user}** ({role})")
+if st.sidebar.button("Changer de Client"):
+    st.session_state.client = None
+    st.rerun()
+if st.sidebar.button("Déconnexion"):
+    st.session_state.clear()
+    st.rerun()
+
+# Menus basés sur les rôles
+menus = ["Situation Stock", "Historique"]
+if role in ["admin", "magasinier"]:
+    menus = ["Bon d'Entrée (BE)", "Bon de Sortie (BS)"] + menus
+if role == "admin":
+    menus.append("Configuration")
+
+choix_menu = st.sidebar.radio("Navigation", menus)
+
+liste_articles = [a["designation"] for a in db["articles"]]
+
+# --- RUBRIQUE : BON D'ENTRÉE (BE) ---
+if choix_menu == "Bon d'Entrée (BE)":
+    st.header("📥 Créer un Bon d'Entrée (BE)")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        date_be = st.date_input("Date du BE", max_value=datetime.date.today())
+        fournisseur = st.selectbox("Fournisseur", db["fournisseurs"] + ["Autre..."])
+        if fournisseur == "Autre...":
+            fournisseur = st.text_input("Nouveau Fournisseur")
+    with col2:
+        lieu = st.text_input("Lieu de livraison", "Dépôt Principal")
+        remarque_bon = st.text_area("Remarque Générale")
+        
+    st.subheader("Articles à réceptionner")
+    if "current_be_articles" not in st.session_state:
+        st.session_state.current_be_articles = []
+
+    with st.form("ajout_article_be"):
+        c1, c2, c3 = st.columns([2, 1, 1])
+        with c1:
+            article_sel = st.selectbox("Article", liste_articles if liste_articles else ["Veuillez configurer les articles"])
         with c2:
-            items = query(f"SELECT id, name, active FROM {t_map[cat]} ORDER BY name")
-            if items:
-                st.dataframe(pd.DataFrame([dict(i) for i in items]), use_container_width=True, hide_index=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            qte = st.number_input("Quantité", min_value=1, value=1)
+        with c3:
+            remarque_art = st.text_input("Remarque")
+        
+        if st.form_submit_button("Ajouter l'article"):
+            if not liste_articles:
+                st.error("Aucun article configuré !")
+            else:
+                ref = next(a["ref"] for a in db["articles"] if a["designation"] == article_sel)
+                # Fusion automatique si l'article existe déjà dans le bon
+                trouve = False
+                for item in st.session_state.current_be_articles:
+                    if item["designation"] == article_sel:
+                        item["qte"] += qte
+                        trouve = True
+                        break
+                if not trouve:
+                    st.session_state.current_be_articles.append({"ref": ref, "designation": article_sel, "qte": qte, "remarque": remarque_art})
+                st.success("Article ajouté.")
+                st.rerun()
+                
+    if st.session_state.current_be_articles:
+        st.table(pd.DataFrame(st.session_state.current_be_articles))
+        if st.button("Vider la liste"):
+            st.session_state.current_be_articles = []
+            st.rerun()
+            
+        if st.button("Enregistrer le Bon d'Entrée", type="primary"):
+            nouveau_be = {
+                "id": generate_id("BE"),
+                "type": "BE",
+                "date": date_be.strftime("%Y-%m-%d"),
+                "heure_saisie": datetime.datetime.now().strftime("%H:%M:%S"),
+                "client": client,
+                "user": st.session_state.user,
+                "fournisseur_equipe": fournisseur,
+                "destination": lieu,
+                "remarque": remarque_bon,
+                "articles": st.session_state.current_be_articles
+            }
+            db["transactions"].append(nouveau_be)
+            save_db(db)
+            
+            # Gestion du fournisseur si nouveau
+            if fournisseur not in db["fournisseurs"] and fournisseur != "":
+                db["fournisseurs"].append(fournisseur)
+                save_db(db)
+                
+            st.success(f"Bon d'entrée {nouveau_be['id']} enregistré avec succès !")
+            
+            # Génération PDF
+            pdf_bytes = generate_pdf(nouveau_be, client)
+            st.download_button(label="📄 Télécharger le BE (PDF)", data=pdf_bytes, file_name=f"{nouveau_be['id']}.pdf", mime='application/pdf')
+            
+            # Reset
+            st.session_state.current_be_articles = []
+
+# --- RUBRIQUE : BON DE SORTIE (BS) ---
+elif choix_menu == "Bon de Sortie (BS)":
+    st.header("📤 Créer un Bon de Sortie (BS)")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        date_bs = st.date_input("Date du BS", max_value=datetime.date.today())
+        equipe = st.selectbox("Équipe destinataire", db["equipes"])
+    with col2:
+        destination = st.text_input("Destination / Site")
+        remarque_bon = st.text_area("Remarque Générale")
+        
+    st.subheader("Articles à sortir")
+    stock_actuel = get_stock(client)
+    
+    if "current_bs_articles" not in st.session_state:
+        st.session_state.current_bs_articles = []
+
+    with st.form("ajout_article_bs"):
+        c1, c2, c3 = st.columns([2, 1, 1])
+        with c1:
+            article_sel = st.selectbox("Article", liste_articles if liste_articles else ["Veuillez configurer les articles"])
+        with c2:
+            qte = st.number_input("Quantité", min_value=1, value=1)
+        with c3:
+            remarque_art = st.text_input("Remarque")
+        
+        if st.form_submit_button("Ajouter l'article"):
+            if not liste_articles:
+                st.error("Aucun article configuré !")
+            else:
+                # Vérification du stock dispo (Stock actuel - déjà mis dans le bon)
+                qte_deja_au_bon = sum(item["qte"] for item in st.session_state.current_bs_articles if item["designation"] == article_sel)
+                dispo = stock_actuel.get(article_sel, {}).get("qte", 0) - qte_deja_au_bon
+                
+                if qte > dispo:
+                    st.error(f"Stock insuffisant ! Stock disponible restant : {dispo}")
+                else:
+                    ref = next(a["ref"] for a in db["articles"] if a["designation"] == article_sel)
+                    trouve = False
+                    for item in st.session_state.current_bs_articles:
+                        if item["designation"] == article_sel:
+                            item["qte"] += qte
+                            trouve = True
+                            break
+                    if not trouve:
+                        st.session_state.current_bs_articles.append({"ref": ref, "designation": article_sel, "qte": qte, "remarque": remarque_art})
+                    st.success("Article ajouté.")
+                    st.rerun()
+
+    if st.session_state.current_bs_articles:
+        st.table(pd.DataFrame(st.session_state.current_bs_articles))
+        if st.button("Vider la liste"):
+            st.session_state.current_bs_articles = []
+            st.rerun()
+            
+        if st.button("Enregistrer le Bon de Sortie", type="primary"):
+            nouveau_bs = {
+                "id": generate_id("BS"),
+                "type": "BS",
+                "date": date_bs.strftime("%Y-%m-%d"),
+                "heure_saisie": datetime.datetime.now().strftime("%H:%M:%S"),
+                "client": client,
+                "user": st.session_state.user,
+                "fournisseur_equipe": equipe,
+                "destination": destination,
+                "remarque": remarque_bon,
+                "articles": st.session_state.current_bs_articles
+            }
+            db["transactions"].append(nouveau_bs)
+            save_db(db)
+            st.success(f"Bon de sortie {nouveau_bs['id']} enregistré avec succès !")
+            
+            # Génération PDF
+            pdf_bytes = generate_pdf(nouveau_bs, client)
+            st.download_button(label="📄 Télécharger le BS (PDF)", data=pdf_bytes, file_name=f"{nouveau_bs['id']}.pdf", mime='application/pdf')
+            
+            st.session_state.current_bs_articles = []
+
+# --- RUBRIQUE : SITUATION STOCK ---
+elif choix_menu == "Situation Stock":
+    st.header("📊 Situation du Stock Actuel")
+    st.write(f"Stock en temps réel pour le client : **{client}**")
+    
+    stock = get_stock(client)
+    if not stock:
+        st.info("Le stock est vide.")
+    else:
+        df_stock = pd.DataFrame.from_dict(stock, orient='index').reset_index()
+        df_stock.columns = ["Désignation", "Référence", "Quantité Disponible"]
+        # Réorganiser les colonnes
+        df_stock = df_stock[["Référence", "Désignation", "Quantité Disponible"]]
+        st.dataframe(df_stock, use_container_width=True)
+
+# --- RUBRIQUE : HISTORIQUE ---
+elif choix_menu == "Historique":
+    st.header("🕒 Historique des Mouvements")
+    tab_be, tab_bs = st.tabs(["Bons d'Entrée (BE)", "Bons de Sortie (BS)"])
+    
+    def afficher_historique(type_bon):
+        trans = [t for t in db["transactions"] if t["type"] == type_bon and t["client"] == client]
+        if not trans:
+            st.write(f"Aucun {type_bon} trouvé.")
+            return
+            
+        for t in reversed(trans):
+            with st.expander(f"{t['id']} | Date: {t['date']} | Par: {t['user']} | Fournisseur/Equipe: {t['fournisseur_equipe']}"):
+                st.write(f"**Lieu/Destination:** {t['destination']} | **Remarque:** {t['remarque']}")
+                st.table(pd.DataFrame(t['articles']))
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    pdf_bytes = generate_pdf(t, client)
+                    st.download_button("🖨️ Imprimer PDF", data=pdf_bytes, file_name=f"{t['id']}.pdf", mime='application/pdf', key=f"print_{t['id']}")
+                with col2:
+                    if role in ["admin", "magasinier"]:
+                        if st.button("🗑️ Supprimer", key=f"del_{t['id']}"):
+                            db["transactions"] = [x for x in db["transactions"] if x["id"] != t["id"]]
+                            save_db(db)
+                            st.success("Bon supprimé ! Le stock a été ajusté.")
+                            st.rerun()
+                # La modification complète demanderait un formulaire complet pré-rempli (Simplifié ici pour des raisons d'espace, mais la suppression/recréation est la méthode la plus sûre comptablement)
+
+    with tab_be:
+        afficher_historique("BE")
+    with tab_bs:
+        afficher_historique("BS")
+
+# --- RUBRIQUE : CONFIGURATION (Admin uniquement) ---
+elif choix_menu == "Configuration":
+    st.header("⚙️ Configuration Système")
+    
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Utilisateurs", "Articles", "Fournisseurs", "Équipes", "Ajustement Stock"])
+    
+    with tab1:
+        st.subheader("Gestion des Utilisateurs")
+        df_users = pd.DataFrame.from_dict(db["users"], orient='index').reset_index()
+        df_users.columns = ["Nom", "Mot de passe", "Rôle", "Dernière Connexion"]
+        st.dataframe(df_users)
+        
+        with st.form("add_user"):
+            nom_u = st.text_input("Nom d'utilisateur")
+            pass_u = st.text_input("Mot de passe")
+            role_u = st.selectbox("Rôle", ["magasinier", "coordinateur", "coordinatrice", "admin"])
+            if st.form_submit_button("Ajouter/Modifier Utilisateur"):
+                db["users"][nom_u] = {"password": pass_u, "role": role_u, "last_login": ""}
+                save_db(db)
+                st.success("Utilisateur enregistré !")
+                st.rerun()
+
+    with tab2:
+        st.subheader("Gestion des Articles (Référentiel global)")
+        st.dataframe(pd.DataFrame(db["articles"]))
+        with st.form("add_article"):
+            ref = st.text_input("Référence")
+            desig = st.text_input("Désignation (ex: Câble RJ45)")
+            if st.form_submit_button("Ajouter l'article"):
+                if desig:
+                    db["articles"].append({"ref": ref, "designation": desig})
+                    save_db(db)
+                    st.success("Article ajouté !")
+                    st.rerun()
+
+    with tab3:
+        st.subheader("Fournisseurs")
+        st.write(db["fournisseurs"])
+        with st.form("add_fournisseur"):
+            f_nom = st.text_input("Nom fournisseur")
+            if st.form_submit_button("Ajouter"):
+                db["fournisseurs"].append(f_nom)
+                save_db(db)
+                st.rerun()
+
+    with tab4:
+        st.subheader("Équipes Projet")
+        st.write(db["equipes"])
+        with st.form("add_equipe"):
+            e_nom = st.text_input("Nom de l'équipe")
+            if st.form_submit_button("Ajouter"):
+                db["equipes"].append(e_nom)
+                save_db(db)
+                st.rerun()
+
+    with tab5:
+        st.subheader(f"Ajustement Manuel du Stock ({client})")
+        with st.form("adjust_stock"):
+            art_adj = st.selectbox("Article", liste_articles if liste_articles else ["Vide"])
+            type_adj = st.radio("Type d'ajustement", ["Ajouter au stock (+)", "Retirer du stock (-)"])
+            qte_adj = st.number_input("Quantité à ajuster", min_value=1)
+            motif = st.text_input("Motif de l'ajustement")
+            if st.form_submit_button("Appliquer l'ajustement"):
+                t_type = "ADJ_PLUS" if "Ajouter" in type_adj else "ADJ_MOINS"
+                db["transactions"].append({
+                    "id": f"MW-ADJ-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    "type": t_type,
+                    "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                    "client": client,
+                    "user": st.session_state.user,
+                    "fournisseur_equipe": "Manuel",
+                    "destination": motif,
+                    "remarque": "Ajustement Admin",
+                    "articles": [{"designation": art_adj, "qte": qte_adj, "ref": ""}]
+                })
+                save_db(db)
+                st.success("Stock ajusté avec succès !")
+                st.rerun()
