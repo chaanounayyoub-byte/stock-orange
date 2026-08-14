@@ -45,7 +45,7 @@ PRINT_ROLES = {"admin", "magasinier", "coordinateur", "coordinatrice"}
 
 
 # ============================================================
-# DESIGN
+# DESIGN — CONSERVÉ DEPUIS LE CODE DE RÉFÉRENCE VALIDÉ
 # ============================================================
 def apply_theme():
     st.markdown(
@@ -388,6 +388,12 @@ def validate_articles(articles):
                 "doit être supérieure à 0."
             )
 
+        if not str(item.get("remarque", "")).strip():
+            return False, (
+                f"La remarque de l'article « {designation} » "
+                "est obligatoire."
+            )
+
     return True, ""
 
 
@@ -453,14 +459,6 @@ def can_print():
         "coordinateur",
         "coordinatrice",
     }
-
-
-def confirmation(label, key):
-    return st.checkbox(label, key=key)
-
-
-def all_article_remarks_present(articles):
-    return all(str(item.get("remarque", "")).strip() for item in articles)
 
 
 # ============================================================
@@ -1082,7 +1080,11 @@ if st.session_state.client is None:
             type="password",
         )
 
-        confirm_account = confirmation("Je confirme la modification de mon compte.", "confirm_my_account")
+        confirm_account = st.checkbox(
+            "Je confirme la modification de mon compte.",
+            key="confirm_account_update",
+        )
+
         if st.button("Mettre à jour mon compte"):
             if not confirm_account:
                 st.warning("Veuillez confirmer la modification avant de continuer.")
@@ -1392,11 +1394,19 @@ if choix_menu == "Bon d'Entrée (BE)":
                     key=f"be_art_rem_{editing_id or 'new'}",
                 )
 
+            confirm_add_be_article = st.checkbox(
+                "Je confirme l'ajout de cet article au bon.",
+                key=f"confirm_be_add_{editing_id or 'new'}",
+            )
+
             add_article = st.form_submit_button(
                 "Ajouter l'article"
             )
 
             if add_article:
+                if not confirm_add_be_article:
+                    st.warning("Veuillez confirmer l'ajout de l'article.")
+                    st.stop()
                 if not remarque_article.strip():
                     st.error("La remarque de l'article est obligatoire.")
                 elif qte <= 0:
@@ -1535,18 +1545,11 @@ if choix_menu == "Bon d'Entrée (BE)":
                 )
 
             with c3:
-                confirm_be_line = confirmation("Confirmer la modification de la ligne.", f"confirm_be_line_{editing_id or 'new'}")
                 if st.button(
                     "Appliquer",
                     key=f"be_apply_{editing_id or 'new'}",
                     use_container_width=True,
                 ):
-                    if not confirm_be_line:
-                        st.warning("Veuillez confirmer la modification de la ligne.")
-                        st.stop()
-                    if not line_remark.strip():
-                        st.error("La remarque de l'article est obligatoire.")
-                        st.stop()
                     working_articles[
                         line_index
                     ]["qte"] = int(line_qty)
@@ -1577,27 +1580,33 @@ if choix_menu == "Bon d'Entrée (BE)":
         st.divider()
 
         if editing:
-            confirm_be_edit = confirmation("Je confirme l'enregistrement des modifications du BE.", f"confirm_be_edit_{editing_id}")
             c1, c2 = st.columns(2)
 
             with c1:
+                confirm_be_edit = st.checkbox(
+                    "Je confirme la modification du BE.",
+                    key=f"confirm_be_edit_{editing_id}",
+                )
                 if st.button(
                     "💾 Enregistrer les modifications",
                     type="primary",
                     use_container_width=True,
                 ):
                     if not confirm_be_edit:
-                        st.warning("Veuillez confirmer l'enregistrement des modifications.")
-                        st.stop()
-                    if date_be > today():
+                        st.warning("Veuillez confirmer la modification du BE.")
+                    elif date_be > today():
                         st.error(
                             "La date du BE ne peut pas "
                             "dépasser aujourd'hui."
                         )
-                    elif not fournisseur:
+                    elif not fournisseur.strip():
                         st.error(
                             "Le fournisseur est obligatoire."
                         )
+                    elif not lieu.strip():
+                        st.error("Le lieu de livraison est obligatoire.")
+                    elif not remarque_bon.strip():
+                        st.error("La remarque générale est obligatoire.")
                     else:
                         valid, message = (
                             validate_articles(
@@ -1607,12 +1616,6 @@ if choix_menu == "Bon d'Entrée (BE)":
 
                         if not valid:
                             st.error(message)
-                        elif not lieu.strip():
-                            st.error("Le lieu de livraison est obligatoire.")
-                        elif not remarque_bon.strip():
-                            st.error("La remarque générale est obligatoire.")
-                        elif not all_article_remarks_present(working_articles):
-                            st.error("La remarque de chaque article est obligatoire.")
                         else:
                             editing["date"] = (
                                 date_be.strftime(
@@ -1671,21 +1674,30 @@ if choix_menu == "Bon d'Entrée (BE)":
                     st.rerun()
 
         else:
-            confirm_be_new = confirmation("Je confirme l'enregistrement définitif du Bon d'Entrée.", "confirm_be_new")
+            confirm_be_save = st.checkbox(
+                "Je confirme l'enregistrement définitif du BE.",
+                key="confirm_be_save",
+            )
             if st.button(
                 "💾 Enregistrer le Bon d'Entrée",
                 type="primary",
                 use_container_width=True,
             ):
-                if date_be > today():
+                if not confirm_be_save:
+                    st.warning("Veuillez confirmer l'enregistrement du BE.")
+                elif date_be > today():
                     st.error(
                         "La date du BE ne peut pas "
                         "dépasser aujourd'hui."
                     )
-                elif not fournisseur:
+                elif not fournisseur.strip():
                     st.error(
                         "Le fournisseur est obligatoire."
                     )
+                elif not lieu.strip():
+                    st.error("Le lieu de livraison est obligatoire.")
+                elif not remarque_bon.strip():
+                    st.error("La remarque générale est obligatoire.")
                 else:
                     valid, message = (
                         validate_articles(
@@ -1695,12 +1707,6 @@ if choix_menu == "Bon d'Entrée (BE)":
 
                     if not valid:
                         st.error(message)
-                    elif not lieu.strip():
-                        st.error("Le lieu de livraison est obligatoire.")
-                    elif not remarque_bon.strip():
-                        st.error("La remarque générale est obligatoire.")
-                    elif not all_article_remarks_present(working_articles):
-                        st.error("La remarque de chaque article est obligatoire.")
                     else:
                         new_be = {
                             "id": generate_bon_id("BE"),
@@ -1965,13 +1971,24 @@ elif choix_menu == "Bon de Sortie (BS)":
                 f"Stock disponible : {available}"
             )
 
+            confirm_add_bs_article = st.checkbox(
+                "Je confirme l'ajout de cet article au BS.",
+                key=f"confirm_bs_add_{editing_id or 'new'}",
+            )
+
             add_article = st.form_submit_button(
                 "Ajouter l'article"
             )
 
             if add_article:
+                if not confirm_add_bs_article:
+                    st.warning("Veuillez confirmer l'ajout de l'article.")
+                    st.stop()
                 if not remarque_article.strip():
                     st.error("La remarque de l'article est obligatoire.")
+                    st.stop()
+                if qte <= 0:
+                    st.error("La quantité doit être supérieure à 0.")
                     st.stop()
                 already = sum(
                     safe_int(
@@ -2136,18 +2153,11 @@ elif choix_menu == "Bon de Sortie (BS)":
                 )
 
             with c3:
-                confirm_bs_line = confirmation("Confirmer la modification de la ligne.", f"confirm_bs_line_{editing_id or 'new'}")
                 if st.button(
                     "Appliquer",
                     key=f"bs_apply_{editing_id or 'new'}",
                     use_container_width=True,
                 ):
-                    if not confirm_bs_line:
-                        st.warning("Veuillez confirmer la modification de la ligne.")
-                        st.stop()
-                    if not line_remark.strip():
-                        st.error("La remarque de l'article est obligatoire.")
-                        st.stop()
                     working_articles[
                         line_index
                     ]["qte"] = int(line_qty)
@@ -2181,12 +2191,18 @@ elif choix_menu == "Bon de Sortie (BS)":
             c1, c2 = st.columns(2)
 
             with c1:
+                confirm_bs_edit = st.checkbox(
+                    "Je confirme la modification du BS.",
+                    key=f"confirm_bs_edit_{editing_id}",
+                )
                 if st.button(
                     "💾 Enregistrer les modifications",
                     type="primary",
                     use_container_width=True,
                 ):
-                    if date_bs > today():
+                    if not confirm_bs_edit:
+                        st.warning("Veuillez confirmer la modification du BS.")
+                    elif date_bs > today():
                         st.error(
                             "La date du BS ne peut pas "
                             "dépasser aujourd'hui."
@@ -2199,6 +2215,10 @@ elif choix_menu == "Bon de Sortie (BS)":
                         st.error(
                             "L'équipe est obligatoire."
                         )
+                    elif not destination.strip():
+                        st.error("La destination est obligatoire.")
+                    elif not remarque_bon.strip():
+                        st.error("La remarque générale est obligatoire.")
                     else:
                         valid, message = (
                             validate_articles(
@@ -2271,13 +2291,18 @@ elif choix_menu == "Bon de Sortie (BS)":
                     st.rerun()
 
         else:
-            confirm_bs_new = confirmation("Je confirme l'enregistrement définitif du Bon de Sortie.", "confirm_bs_new")
+            confirm_bs_save = st.checkbox(
+                "Je confirme l'enregistrement définitif du BS.",
+                key="confirm_bs_save",
+            )
             if st.button(
                 "💾 Enregistrer le Bon de Sortie",
                 type="primary",
                 use_container_width=True,
             ):
-                if date_bs > today():
+                if not confirm_bs_save:
+                    st.warning("Veuillez confirmer l'enregistrement du BS.")
+                elif date_bs > today():
                     st.error(
                         "La date du BS ne peut pas "
                         "dépasser aujourd'hui."
@@ -2290,6 +2315,10 @@ elif choix_menu == "Bon de Sortie (BS)":
                     st.error(
                         "L'équipe est obligatoire."
                     )
+                elif not destination.strip():
+                    st.error("La destination est obligatoire.")
+                elif not remarque_bon.strip():
+                    st.error("La remarque générale est obligatoire.")
                 else:
                     valid, message = (
                         validate_articles(
@@ -2299,12 +2328,6 @@ elif choix_menu == "Bon de Sortie (BS)":
 
                     if not valid:
                         st.error(message)
-                    elif not destination.strip():
-                        st.error("La destination est obligatoire.")
-                    elif not remarque_bon.strip():
-                        st.error("La remarque générale est obligatoire.")
-                    elif not all_article_remarks_present(working_articles):
-                        st.error("La remarque de chaque article est obligatoire.")
                     else:
                         valid_stock, stock_message = (
                             validate_bs_stock(
@@ -2852,7 +2875,6 @@ elif choix_menu == "Historique":
 
                 with c3:
                     if can_edit():
-                        confirm_edit_bon = confirmation("Confirmer la modification de ce bon.", f"confirm_edit_bon_{transaction['id']}")
                         if st.button(
                             "✏️ Modifier",
                             key=(
@@ -2860,9 +2882,6 @@ elif choix_menu == "Historique":
                             ),
                             use_container_width=True,
                         ):
-                            if not confirm_edit_bon:
-                                st.warning("Veuillez confirmer la modification.")
-                                st.stop()
                             st.session_state.editing_transaction_id = (
                                 transaction["id"]
                             )
@@ -2884,7 +2903,10 @@ elif choix_menu == "Historique":
                             st.rerun()
 
                 if can_edit():
-                    confirm_delete_bon = confirmation("Confirmer la suppression définitive de ce bon.", f"confirm_delete_bon_{transaction['id']}")
+                    confirm_delete_bon = st.checkbox(
+                        "Je confirme la suppression de ce bon.",
+                        key=f"confirm_delete_bon_{transaction['id']}",
+                    )
                     if st.button(
                         "🗑️ Supprimer ce bon",
                         key=(
@@ -2893,7 +2915,7 @@ elif choix_menu == "Historique":
                         use_container_width=True,
                     ):
                         if not confirm_delete_bon:
-                            st.warning("Veuillez confirmer la suppression.")
+                            st.warning("Veuillez confirmer la suppression du bon.")
                             st.stop()
                         db["transactions"] = [
                             item
@@ -3159,14 +3181,17 @@ elif choix_menu == "Configuration":
                     ],
                 )
 
-            st.checkbox("Je confirme la création de cet utilisateur.", key="confirm_create_user")
+            confirm_create_user = st.checkbox(
+                "Je confirme la création de cet utilisateur.",
+                key="confirm_create_user",
+            )
             create = st.form_submit_button(
                 "Créer l'utilisateur",
                 type="primary",
             )
 
             if create:
-                if not st.session_state.get("confirm_create_user", False):
+                if not confirm_create_user:
                     st.warning("Veuillez confirmer la création de l'utilisateur.")
                     st.stop()
                 username = username.strip()
@@ -3256,14 +3281,17 @@ elif choix_menu == "Configuration":
                 ),
             )
 
-            st.checkbox("Je confirme la modification de cet utilisateur.", key="confirm_edit_user")
+            confirm_edit_user = st.checkbox(
+                "Je confirme la modification de cet utilisateur.",
+                key="confirm_edit_user",
+            )
             save_user = st.form_submit_button(
                 "Enregistrer les modifications"
             )
 
             if save_user:
-                if not st.session_state.get("confirm_edit_user", False):
-                    st.warning("Veuillez confirmer la modification.")
+                if not confirm_edit_user:
+                    st.warning("Veuillez confirmer la modification de l'utilisateur.")
                     st.stop()
                 new_name = new_name.strip()
 
@@ -3313,12 +3341,15 @@ elif choix_menu == "Configuration":
                     st.rerun()
 
         if selected_user != "admin":
-            confirm_delete_user = confirmation("Je confirme la suppression définitive de cet utilisateur.", "confirm_delete_user")
+            confirm_delete_user = st.checkbox(
+                "Je confirme la suppression de cet utilisateur.",
+                key="confirm_delete_user",
+            )
             if st.button(
                 "🗑️ Supprimer l'utilisateur"
             ):
                 if not confirm_delete_user:
-                    st.warning("Veuillez confirmer la suppression.")
+                    st.warning("Veuillez confirmer la suppression de l'utilisateur.")
                     st.stop()
                 db["users"].pop(
                     selected_user,
@@ -3376,12 +3407,15 @@ elif choix_menu == "Configuration":
                 base_name = ""
 
             initial_qty = st.number_input(f"Quantité initiale pour {client}", min_value=0, value=0, step=1)
-            st.checkbox("Je confirme l'ajout de cet article.", key="confirm_add_article")
+            confirm_add_article = st.checkbox(
+                "Je confirme la création de cet article.",
+                key="confirm_add_article_admin",
+            )
             add = st.form_submit_button("Ajouter l'article", type="primary")
 
             if add:
-                if not st.session_state.get("confirm_add_article", False):
-                    st.warning("Veuillez confirmer l'ajout de l'article.")
+                if not confirm_add_article:
+                    st.warning("Veuillez confirmer la création de l'article.")
                     st.stop()
                 designation = build_article_designation(category, dimension, fibre_type, longueur, base_name)
                 duplicate = any(a.get("designation", "").strip().lower() == designation.lower() for a in db["articles"])
@@ -3429,11 +3463,14 @@ elif choix_menu == "Configuration":
                 st.text_input("Index", value=current.get("ref", ""), disabled=True)
                 new_designation = st.text_input("Désignation", value=current.get("designation", ""))
                 st.caption(f"Catégorie : {current.get('categorie','Sans catégorie')} | Caractéristique : {current.get('caracteristique','')}")
-                st.checkbox("Je confirme la modification de cet article.", key="confirm_edit_article")
+                confirm_edit_article = st.checkbox(
+                    "Je confirme la modification de cet article.",
+                    key="confirm_edit_article_admin",
+                )
                 save_article = st.form_submit_button("Enregistrer les modifications", type="primary")
 
                 if save_article:
-                    if not st.session_state.get("confirm_edit_article", False):
+                    if not confirm_edit_article:
                         st.warning("Veuillez confirmer la modification de l'article.")
                         st.stop()
                     new_designation = new_designation.strip()
@@ -3454,7 +3491,10 @@ elif choix_menu == "Configuration":
                         st.success("Article modifié.")
                         st.rerun()
 
-            confirm_delete_article = confirmation("Je confirme la suppression définitive de cet article.", "confirm_delete_article")
+            confirm_delete_article = st.checkbox(
+                "Je confirme la suppression de cet article.",
+                key="confirm_delete_article_admin",
+            )
             if st.button("🗑️ Supprimer l'article"):
                 if not confirm_delete_article:
                     st.warning("Veuillez confirmer la suppression de l'article.")
@@ -3489,13 +3529,16 @@ elif choix_menu == "Configuration":
                 "Nouveau fournisseur"
             )
 
-            st.checkbox("Je confirme l'ajout de ce fournisseur.", key="confirm_add_supplier")
+            confirm_add_supplier = st.checkbox(
+                "Je confirme l'ajout du fournisseur.",
+                key="confirm_add_supplier",
+            )
             add_supplier = st.form_submit_button(
                 "Ajouter"
             )
 
             if add_supplier:
-                if not st.session_state.get("confirm_add_supplier", False):
+                if not confirm_add_supplier:
                     st.warning("Veuillez confirmer l'ajout du fournisseur.")
                     st.stop()
                 supplier = supplier.strip()
@@ -3530,12 +3573,15 @@ elif choix_menu == "Configuration":
                 key="supplier_delete",
             )
 
-            confirm_delete_supplier = confirmation("Je confirme la suppression de ce fournisseur.", "confirm_delete_supplier")
+            confirm_delete_supplier = st.checkbox(
+                "Je confirme la suppression du fournisseur.",
+                key="confirm_delete_supplier",
+            )
             if st.button(
                 "🗑️ Supprimer le fournisseur"
             ):
                 if not confirm_delete_supplier:
-                    st.warning("Veuillez confirmer la suppression.")
+                    st.warning("Veuillez confirmer la suppression du fournisseur.")
                     st.stop()
                 db["fournisseurs"].remove(
                     supplier_delete
@@ -3569,13 +3615,16 @@ elif choix_menu == "Configuration":
                 "Nouvelle équipe"
             )
 
-            st.checkbox("Je confirme l'ajout de cette équipe.", key="confirm_add_team")
+            confirm_add_team = st.checkbox(
+                "Je confirme l'ajout de l'équipe.",
+                key="confirm_add_team",
+            )
             add_team = st.form_submit_button(
                 "Ajouter"
             )
 
             if add_team:
-                if not st.session_state.get("confirm_add_team", False):
+                if not confirm_add_team:
                     st.warning("Veuillez confirmer l'ajout de l'équipe.")
                     st.stop()
                 team = team.strip()
@@ -3607,12 +3656,15 @@ elif choix_menu == "Configuration":
                 key="team_delete",
             )
 
-            confirm_delete_team = confirmation("Je confirme la suppression de cette équipe.", "confirm_delete_team")
+            confirm_delete_team = st.checkbox(
+                "Je confirme la suppression de l'équipe.",
+                key="confirm_delete_team",
+            )
             if st.button(
                 "🗑️ Supprimer l'équipe"
             ):
                 if not confirm_delete_team:
-                    st.warning("Veuillez confirmer la suppression.")
+                    st.warning("Veuillez confirmer la suppression de l'équipe.")
                     st.stop()
                 db["equipes"].remove(
                     team_delete
@@ -3670,16 +3722,19 @@ elif choix_menu == "Configuration":
                 reason = st.text_input(
                     "Motif"
                 )
-                st.checkbox("Je confirme l'ajustement manuel du stock.", key="confirm_adjustment")
 
+                confirm_adjustment = st.checkbox(
+                    "Je confirme cet ajustement de stock.",
+                    key="confirm_adjustment_stock",
+                )
                 apply_adjustment = st.form_submit_button(
                     "Appliquer l'ajustement",
                     type="primary",
                 )
 
                 if apply_adjustment:
-                    if not st.session_state.get("confirm_adjustment", False):
-                        st.warning("Veuillez confirmer l'ajustement avant de continuer.")
+                    if not confirm_adjustment:
+                        st.warning("Veuillez confirmer l'ajustement du stock.")
                         st.stop()
                     if not reason.strip():
                         st.error(
