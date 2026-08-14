@@ -10,13 +10,12 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 )
 from docx import Document
-from docx.shared import Cm
 
 # =========================================================
-# CONFIGURATION & THÈME PREMIUM
+# CONFIGURATION & THÈME LIGHT SAAS MINIMALISTE
 # =========================================================
 st.set_page_config(
     page_title="NOMATIS — MW Stock Engine",
@@ -47,113 +46,110 @@ PERMISSIONS = {
     "coordinatrice": {"stock", "print"},
 }
 
-# injection CSS
+# Injection CSS — Style SaaS Lumineux & Épuré
 st.markdown(
     """
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         html, body, [class*="css"] {
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #F8FAFC !important;
+            color: #0F172A !important;
         }
 
         .stApp {
-            background-color: #0F172A;
-            color: #F8FAFC;
+            background-color: #F8FAFC;
         }
 
-        /* En-tête / Header */
+        /* En-tête principal */
         .main-header {
-            background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-            border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 24px 32px;
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 20px 28px;
             margin-bottom: 24px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
         .main-title {
-            color: #F8FAFC !important;
-            font-weight: 800;
-            font-size: 28px;
-            letter-spacing: -0.5px;
+            color: #0F172A !important;
+            font-weight: 700;
+            font-size: 24px;
             margin: 0;
         }
 
         .subtitle {
-            color: #94A3B8 !important;
+            color: #64748B !important;
             font-size: 14px;
-            font-weight: 500;
+            margin-top: 4px;
         }
 
-        /* Cartes & Containers */
+        /* Cartes Blanches Épurées */
         .glass-card {
-            background: #1E293B;
-            border: 1px solid #334155;
-            border-radius: 16px;
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
             padding: 24px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
         }
 
-        .glass-card:hover {
-            border-color: #38BDF8;
-            box-shadow: 0 6px 24px rgba(56, 189, 248, 0.15);
+        /* Boutons (Bleu Indigo Moderne) */
+        .stButton > button, div[data-testid="stFormSubmitButton"] > button {
+            background-color: #2563EB !important;
+            color: #FFFFFF !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            border: none !important;
+            padding: 10px 20px !important;
+            transition: all 0.2s ease !important;
+            min-height: 42px !important;
         }
 
-        /* UI Elements */
+        .stButton > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
+            background-color: #1D4ED8 !important;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2) !important;
+        }
+
+        /* Champs de Saisie (Inputs) */
+        .stTextInput input, .stSelectbox div[data-baseweb="select"], .stNumberInput input {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
+            border: 1px solid #CBD5E1 !important;
+            border-radius: 8px !important;
+        }
+
+        .stTextInput input:focus, .stNumberInput input:focus {
+            border-color: #2563EB !important;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+        }
+
+        /* Onglets / Tabs */
         div[data-baseweb="tab-list"] {
-            gap: 12px;
-            background-color: #1E293B;
-            padding: 8px;
-            border-radius: 12px;
-            border: 1px solid #334155;
+            gap: 8px;
+            background-color: #F1F5F9;
+            padding: 6px;
+            border-radius: 10px;
+            border: 1px solid #E2E8F0;
         }
 
         button[data-baseweb="tab"] {
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            color: #94A3B8 !important;
-            padding: 10px 18px !important;
+            border-radius: 6px !important;
+            font-weight: 500 !important;
+            color: #64748B !important;
         }
 
         button[aria-selected="true"] {
-            background-color: #0EA5E9 !important;
-            color: #FFFFFF !important;
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
         }
 
-        /* Boutons personnalisés */
-        .stButton > button {
-            border-radius: 10px !important;
-            font-weight: 700 !important;
-            transition: all 0.2s ease-in-out !important;
-            border: none !important;
-        }
-
-        .primary-btn > button {
-            background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
-            color: white !important;
-        }
-
-        .primary-btn > button:hover {
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4) !important;
-            transform: translateY(-1px);
-        }
-
-        /* Inputs Styling */
-        .stTextInput input, .stSelectbox select, .stNumberInput input {
-            background-color: #0F172A !important;
-            color: #F8FAFC !important;
-            border: 1px solid #334155 !important;
-            border-radius: 8px !important;
-        }
-
-        /* Metrics */
+        /* Métriques */
         [data-testid="stMetricValue"] {
-            font-size: 32px !important;
-            font-weight: 800 !important;
-            color: #38BDF8 !important;
+            color: #2563EB !important;
+            font-weight: 700 !important;
         }
     </style>
     """,
@@ -255,7 +251,6 @@ def init_db():
         """
     )
 
-    # Comptes par défaut
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
         cur.execute(
@@ -346,19 +341,12 @@ def can(role, permission):
     return permission in PERMISSIONS.get(role, set())
 
 
-def logo_bytes(path):
-    if os.path.exists(path):
-        with open(path, "rb") as f:
-            return f.read()
-    return None
-
-
 def normalized_logo(path, size=(300, 120)):
     if not os.path.exists(path):
         return None
     try:
         img = Image.open(path).convert("RGB")
-        canvas = Image.new("RGB", size, "#1E293B")
+        canvas = Image.new("RGB", size, "#FFFFFF")
         contained = ImageOps.contain(img, size)
         x = (size[0] - contained.width) // 2
         y = (size[1] - contained.height) // 2
@@ -422,7 +410,7 @@ def generate_pdf(bon_id):
     items_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0EA5E9")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563EB")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
                 ("ALIGN", (2, 1), (2, -1), "CENTER"),
@@ -490,8 +478,8 @@ def login_screen():
         st.markdown(
             """
             <div class="glass-card" style="text-align: center;">
-                <h1 style="color: #38BDF8; margin-bottom: 0px;">NOMATIS</h1>
-                <p style="color: #94A3B8; font-size: 14px;">Plateforme de Gestion de Stock Microwave</p>
+                <h1 style="color: #2563EB; margin-bottom: 0px; font-weight: 800;">NOMATIS</h1>
+                <p style="color: #64748B; font-size: 14px;">Plateforme de Gestion de Stock Microwave</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -544,12 +532,11 @@ if not st.session_state.selected_client:
             else:
                 st.markdown(f"<h2 style='text-align:center; color:{info['color']}'>{client}</h2>", unsafe_allow_html=True)
 
-            st.markdown(f"<h3 style='text-align:center;'>{client}</h3>", unsafe_allow_html=True)
-            st.markdown('<div class="primary-btn">', unsafe_allow_html=True)
+            st.markdown(f"<h3 style='text-align:center; margin-top: 10px;'>{client}</h3>", unsafe_allow_html=True)
             if st.button(f"Ouvrir Espace {client}", key=f"select_{client}", use_container_width=True):
                 st.session_state.selected_client = client
                 st.rerun()
-            st.markdown("</div></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 CLIENT = st.session_state.selected_client
@@ -557,7 +544,6 @@ CLIENT = st.session_state.selected_client
 # =========================================================
 # DASHBOARD / APPLICATION APRES LOGIN & CLIENT
 # =========================================================
-# Header principal
 h1, h2 = st.columns([3, 1])
 with h1:
     st.markdown(
@@ -570,7 +556,7 @@ with h1:
         unsafe_allow_html=True,
     )
 with h2:
-    if st.button("🔄 Changer de Client", use_container_width=True):
+    if st.button("🔄 Changer Client", use_container_width=True):
         st.session_state.selected_client = None
         st.rerun()
     if st.button("🚪 Déconnexion", use_container_width=True):
@@ -578,11 +564,9 @@ with h2:
         st.session_state.selected_client = None
         st.rerun()
 
-# Tabs principaux
 t_be, t_bs, t_stock, t_mods, t_config = st.tabs(
     ["📥 Bon d'Entrée (BE)", "📤 Bon de Sortie (BS)", "📊 État du Stock", "✏️ Modification / Impression", "⚙️ Configuration"]
 )
-
 
 # 📥 BE SECTION
 with t_be:
@@ -608,7 +592,6 @@ with t_be:
 
         if st.session_state.temp_be_items:
             st.table(pd.DataFrame(st.session_state.temp_be_items))
-            st.markdown('<div class="primary-btn">', unsafe_allow_html=True)
             if st.button("💾 Valider et Enregistrer le BE"):
                 bon_id = execute(
                     "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,fournisseur,lieu_livraison,receptionne_par,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -622,7 +605,6 @@ with t_be:
                 st.session_state.temp_be_items = []
                 st.success("BE enregistré avec succès !")
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -658,7 +640,6 @@ with t_bs:
 
         if st.session_state.temp_bs_items:
             st.table(pd.DataFrame(st.session_state.temp_bs_items))
-            st.markdown('<div class="primary-btn">', unsafe_allow_html=True)
             if st.button("💾 Valider et Enregistrer le BS"):
                 bon_id = execute(
                     "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,equipe,resource,destination,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -672,7 +653,6 @@ with t_bs:
                 st.session_state.temp_bs_items = []
                 st.success("BS enregistré avec succès !")
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 
