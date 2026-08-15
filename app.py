@@ -1,101 +1,55 @@
 import io
-import re
-import sqlite3
 from datetime import date, datetime
-
-import docx
-import pandas as pd
-from PIL import Image
+import streamlit as st
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-import streamlit as st
-
 # =========================================================
-# CONFIGURATION DE LA PAGE
-# =========================================================
-st.set_page_config(
-    page_title="Gestion Stock MW NOMATIS",
-    page_icon="📦",
-    layout="wide",
-)
-
-# =========================================================
-# STYLE CSS PERSONNALISÉ
-# =========================================================
-st.markdown(
-    """
-<style>
-    .login-header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 15px;
-        margin-bottom: 5px;
-    }
-    .login-title {
-        color: #1a365d;
-        font-size: 2.2rem;
-        font-weight: bold;
-        margin: 0;
-    }
-    .login-subtitle {
-        color: #10b981;
-        font-size: 1.1rem;
-        text-align: center;
-        margin-bottom: 25px;
-        font-weight: 500;
-    }
-    .header-card {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
-    .client-orange { color: #FF6600 !important; font-weight: bold; }
-    .client-inwi { color: #8A2BE2 !important; font-weight: bold; }
-    .client-zte { color: #0052CC !important; font-weight: bold; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-
-# =========================================================
-# FONCTION DE GÉNÉRATION DU PDF (BON D'ENTRÉE)
+# 1. FONCTION DE GÉNÉRATION DU PDF (MODÈLE EXACT DE VOS CAPTURES)
 # =========================================================
 def generate_pdf_bon_entree(bon_data, items_data, client_name):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
-        buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30
+        buffer,
+        pagesize=A4,
+        rightMargin=20,
+        leftMargin=20,
+        topMargin=20,
+        bottomMargin=20,
     )
     elements = []
     styles = getSampleStyleSheet()
 
     # Dynamic Client Color
     color_map = {
-        "ORANGE": colors.HexColor("#FF6600"),
-        "INWI": colors.HexColor("#8A2BE2"),
-        "ZTE": colors.HexColor("#0052CC"),
+        "ORANGE": "#FF6600",
+        "INWI": "#8A2BE2",
+        "ZTE": "#0052CC",
     }
-    client_color = color_map.get(client_name.upper(), colors.navy)
+    client_color_hex = color_map.get(client_name.upper(), "#000000")
 
-    # 1. En-tête (Logos + Adresse)
+    # Style Header Client
+    client_header_style = ParagraphStyle(
+        "ClientHeader",
+        parent=styles["Heading2"],
+        alignment=2,  # Align Droite
+        textColor=colors.HexColor(client_color_hex),
+        fontSize=14,
+    )
+
+    # Header Data: Logo Nomatis / Client Logo
     company_info = "<b>NOMATIS</b><br/>32 Rue Al Hatim<br/>les Orangers<br/>10000"
     header_data = [
         [
-            Paragraph("<b>// NOMATIS</b>", styles["Heading2"]),
+            Paragraph("<b>// NOMATIS</b>", styles["Heading1"]),
             "",
-            Paragraph(f"<b>LOGO {client_name.upper()}</b>", styles["Heading2"]),
+            Paragraph(f"<b>logo {client_name.lower()}</b>", client_header_style),
         ],
         [Paragraph(company_info, styles["Normal"]), "", ""],
     ]
-    header_table = Table(header_data, colWidths=[200, 150, 180])
+    header_table = Table(header_data, colWidths=[200, 150, 200])
     header_table.setStyle(
         TableStyle(
             [
@@ -105,52 +59,58 @@ def generate_pdf_bon_entree(bon_data, items_data, client_name):
         )
     )
     elements.append(header_table)
-    elements.append(Table([[""]], colWidths=[530], rowHeights=[20]))
+    elements.append(Table([[""]], colWidths=[550], rowHeights=[15]))
 
-    # 2. Titre du Bon
+    # Titre du Bon
     title_style = ParagraphStyle(
         "TitleStyle",
         parent=styles["Heading1"],
         alignment=1,
         textColor=colors.black,
-        fontSize=18,
+        fontSize=16,
     )
     elements.append(Paragraph("<b>Bon d'entrée</b>", title_style))
-    elements.append(Table([[""]], colWidths=[530], rowHeights=[15]))
+    elements.append(Table([[""]], colWidths=[550], rowHeights=[10]))
 
-    # 3. Métadonnées du Bon
+    # Méta-données du Bon (Tableau de 2 lignes)
     meta_data = [
-        ["N° Bon", "Date", "Fournisseur", "Lieu de livraison", "Réceptionné par", "Stock"],
+        ["N° Bon", "Date", "Fournisseur", "Lieu de livraison", "receptioné par", "Stock"],
         [
-            bon_data.get("id", ""),
-            bon_data.get("date_bon", ""),
-            bon_data.get("fournisseur", ""),
-            bon_data.get("lieu_livraison", ""),
-            bon_data.get("user", ""),
-            bon_data.get("stock", ""),
+            str(bon_data.get("id", "")),
+            str(bon_data.get("date_bon", "")),
+            str(bon_data.get("fournisseur", "")),
+            str(bon_data.get("lieu_livraison", "")),
+            str(bon_data.get("user", "")),
+            str(bon_data.get("stock", "")),
         ],
     ]
-    meta_table = Table(meta_data, colWidths=[80, 80, 100, 100, 90, 80])
+    meta_table = Table(meta_data, colWidths=[90, 90, 100, 110, 90, 70])
     meta_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
                 ("GRID", (0, 0), (-1, -1), 1, colors.black),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
             ]
         )
     )
     elements.append(meta_table)
-    elements.append(Table([[""]], colWidths=[530], rowHeights=[15]))
+    elements.append(Table([[""]], colWidths=[550], rowHeights=[10]))
 
-    # 4. Tableau des Articles
+    # Tableau des Articles
     items_table_data = [["Référence", "Désignation", "Qté"]]
     for item in items_data:
-        items_table_data.append([item["reference"], item["designation"], item["qte"]])
+        items_table_data.append(
+            [str(item.get("reference", "")), str(item.get("designation", "")), str(item.get("qte", ""))]
+        )
 
-    items_table = Table(items_table_data, colWidths=[130, 320, 80])
+    # Compléter avec des lignes vides si nécessaire pour garder la forme du modèle
+    while len(items_table_data) < 5:
+        items_table_data.append(["", "", ""])
+
+    items_table = Table(items_table_data, colWidths=[120, 350, 80])
     items_table.setStyle(
         TableStyle(
             [
@@ -164,15 +124,15 @@ def generate_pdf_bon_entree(bon_data, items_data, client_name):
         )
     )
     elements.append(items_table)
-    elements.append(Table([[""]], colWidths=[530], rowHeights=[40]))
+    elements.append(Table([[""]], colWidths=[550], rowHeights=[30]))
 
-    # 5. Pied de page (Signature & Date de saisie)
+    # Pied de Page (Signature et Saisie le)
     footer_data = [
         ["Signature / Cachet Magasinier", ""],
         ["", ""],
         [f"Saisie le : {datetime.now().strftime('%Y-%m-%d %H:%M')}", ""],
     ]
-    footer_table = Table(footer_data, colWidths=[300, 230], rowHeights=[20, 40, 20])
+    footer_table = Table(footer_data, colWidths=[300, 250], rowHeights=[15, 40, 15])
     footer_table.setStyle(
         TableStyle(
             [
@@ -189,89 +149,119 @@ def generate_pdf_bon_entree(bon_data, items_data, client_name):
 
 
 # =========================================================
-# ÉCRAN DE CONNEXION
+# 2. EXTRAIT CORRIGÉ : DANS L'ONGLET HISTORIQUE
 # =========================================================
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
 
-if not st.session_state.authenticated:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown(
-            """
-            <div class="login-header">
-                <span style="font-size: 2rem;">🔹</span>
-                <h1 class="login-title">Gestion Stock MW NOMATIS</h1>
-            </div>
-            <div class="login-subtitle">
-                espace de gestion et suivi de stock MW
-            </div>
-        """,
-            unsafe_allow_html=True,
+with st.expander("✏️ Modifier les informations du Bon"):
+    with st.form("form_edit_bon"):
+        # Parsing sécurisé de la date
+        try:
+            parsed_date = datetime.strptime(
+                bon_detail["date_bon"], "%Y-%m-%d"
+            ).date()
+        except (ValueError, TypeError):
+            parsed_date = date.today()
+
+        today = date.today()
+        safe_value = min(parsed_date, today)
+
+        mod_date = st.date_input(
+            "Nouvelle Date",
+            value=safe_value,
+            max_value=today,
+            key=f"edit_date_{selected_bon_id}",
         )
 
-        with st.form("login_form"):
-            st.subheader("Connexion Sécurisée")
-            username = st.text_input("Identifiant / Nom d'utilisateur")
-            password = st.text_input("Mot de passe", type="password")
-            submit = st.form_submit_button("SE CONNECTER", use_container_width=True)
+        if target_type == "BE":
+            fournisseurs_list = active_names("fournisseurs")
+            current_fourn = bon_detail.get("fournisseur", "")
+            fourn_index = (
+                fournisseurs_list.index(current_fourn)
+                if current_fourn in fournisseurs_list
+                else 0
+            )
 
-            if submit:
-                if username and password:  # Remplacer par votre logique d'authentification
-                    st.session_state.authenticated = True
-                    st.session_state.user = username
-                    st.session_state.role = "ADMIN"
-                    st.session_state.client = "ORANGE"  # Valeur par défaut
-                    st.rerun()
+            mod_fourn = st.selectbox(
+                "Fournisseur",
+                fournisseurs_list,
+                index=fourn_index,
+                key=f"edit_fourn_{selected_bon_id}",
+            )
+            mod_lieu = st.text_input(
+                "Lieu Livraison",
+                value=bon_detail.get("lieu_livraison") or "",
+                key=f"edit_lieu_{selected_bon_id}",
+            )
+        else:
+            equipes_list = active_names("equipes")
+            current_eq = bon_detail.get("equipe", "")
+            eq_index = (
+                equipes_list.index(current_eq)
+                if current_eq in equipes_list
+                else 0
+            )
+
+            mod_eq = st.selectbox(
+                "Équipe",
+                equipes_list,
+                index=eq_index,
+                key=f"edit_eq_{selected_bon_id}",
+            )
+            mod_dest = st.text_input(
+                "Destination",
+                value=bon_detail.get("destination") or "",
+                key=f"edit_dest_{selected_bon_id}",
+            )
+
+        if st.form_submit_button("Valider les modifications"):
+            st.session_state[f"confirm_edit_{selected_bon_id}"] = True
+
+    if st.session_state.get(f"confirm_edit_{selected_bon_id}", False):
+        st.warning(
+            "Confirmez-vous la modification des informations de ce bon ?"
+        )
+        col_yes, col_no = st.columns(2)
+        with col_yes:
+            if st.button(
+                "✅ Oui, Confirmer", key=f"btn_confirm_{selected_bon_id}"
+            ):
+                if target_type == "BE":
+                    execute(
+                        "UPDATE bons SET date_bon=?, fournisseur=?, lieu_livraison=? WHERE id=?",
+                        (
+                            str(mod_date),
+                            mod_fourn,
+                            mod_lieu,
+                            selected_bon_id,
+                        ),
+                    )
                 else:
-                    st.error("Identifiants invalides.")
-    st.stop()
+                    execute(
+                        "UPDATE bons SET date_bon=?, equipe=?, destination=? WHERE id=?",
+                        (
+                            str(mod_date),
+                            mod_eq,
+                            mod_dest,
+                            selected_bon_id,
+                        ),
+                    )
+                st.session_state[f"confirm_edit_{selected_bon_id}"] = False
+                st.success("Bon mis à jour !")
+                st.rerun()
 
-# =========================================================
-# HEADER APPLICATIF (POST-CONNEXION)
-# =========================================================
-selected_client = st.sidebar.selectbox(
-    "Espace Client", ["ORANGE", "INWI", "ZTE"], key="client_select"
+        with col_no:
+            if st.button("❌ Annuler", key=f"btn_cancel_{selected_bon_id}"):
+                st.session_state[f"confirm_edit_{selected_bon_id}"] = False
+                st.rerun()
+
+# Bouton de téléchargement PDF qui utilise la fonction mise à jour
+pdf_file = generate_pdf_bon_entree(
+    bon_detail, items_list, st.session_state.get("client", "ORANGE")
 )
-
-client_css_class = f"client-{selected_client.lower()}"
-
-st.markdown(
-    f"""
-    <div class="header-card">
-        <h2 style="margin:0;">
-            Gestion Stock MW NOMATIS — 
-            <span class="{client_css_class}">ESPACE {selected_client}</span>
-        </h2>
-        <p style="margin:5px 0 0 0; color:#10b981; font-weight:500;">
-            Utilisateur : {st.session_state.get('user', 'Utilisateur')} ({st.session_state.get('role', 'USER')})
-        </p>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
-
-# Exemple de bouton de téléchargement de Bon de Test
-st.subheader("📄 Test de Génération de Bon")
-sample_bon = {
-    "id": "BE-2026-001",
-    "date_bon": "2026-08-15",
-    "fournisseur": "Fournisseur A",
-    "lieu_livraison": "Magasin Principal",
-    "user": st.session_state.get("user", "Admin"),
-    "stock": "Stock MW",
-}
-
-sample_items = [
-    {"reference": "REF-001", "designation": "Antenne MW 0.6m", "qte": 4},
-    {"reference": "REF-002", "designation": "ODU Radio Unit", "qte": 2},
-]
-
-pdf_buffer = generate_pdf_bon_entree(sample_bon, sample_items, selected_client)
-
 st.download_button(
-    label=f"📥 Télécharger Bon d'Entrée ({selected_client})",
-    data=pdf_buffer,
-    file_name=f"Bon_Entree_{selected_client}_{sample_bon['id']}.pdf",
+    label="📥 Imprimer / Télécharger le Bon (PDF)",
+    data=pdf_file,
+    file_name=f"Bon_Entree_{selected_bon_id}.pdf",
     mime="application/pdf",
+    key=f"dl_pdf_{selected_bon_id}",
 )
