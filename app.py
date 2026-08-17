@@ -1,5 +1,8 @@
+from datetime import date, datetime
+import streamlit as st
+
 # =========================================================
-# EXTRAIT CORRIGÉ : DANS L'ONGLET HISTORIQUE (REMPLACER LE FORMULAIRE D'ÉDITION)
+# EXTRAIT CORRIGÉ : DANS L'ONGLET HISTORIQUE
 # =========================================================
 
 with st.expander("✏️ Modifier les informations du Bon"):
@@ -48,7 +51,17 @@ with st.expander("✏️ Modifier les informations du Bon"):
                 key=f"edit_dest_{selected_bon_id}",
             )
 
-        if st.form_submit_button("Valider les modifications"):
+        submitted = st.form_submit_button("Valider les modifications")
+        if submitted:
+            # Stockage des valeurs saisies dans la session pour l'étape de confirmation
+            st.session_state.pending_edit_date = mod_date
+            if target_type == "BE":
+                st.session_state.pending_edit_fourn = mod_fourn
+                st.session_state.pending_edit_lieu = mod_lieu
+            else:
+                st.session_state.pending_edit_eq = mod_eq
+                st.session_state.pending_edit_dest = mod_dest
+            
             st.session_state.confirm_edit_bon = True
 
     if st.session_state.get("confirm_edit_bon", False):
@@ -56,26 +69,35 @@ with st.expander("✏️ Modifier les informations du Bon"):
             "Confirmez-vous la modification des informations de ce bon ?"
         )
         if st.button("✅ Oui, Confirmer Modification"):
+            # Récupération des valeurs enregistrées
+            saved_date = st.session_state.get("pending_edit_date")
+            
             if target_type == "BE":
+                saved_fourn = st.session_state.get("pending_edit_fourn")
+                saved_lieu = st.session_state.get("pending_edit_lieu")
                 execute(
                     "UPDATE bons SET date_bon=?, fournisseur=?, lieu_livraison=? WHERE id=?",
                     (
-                        str(mod_date),
-                        mod_fourn,
-                        mod_lieu,
+                        str(saved_date),
+                        saved_fourn,
+                        saved_lieu,
                         selected_bon_id,
                     ),
                 )
             else:
+                saved_eq = st.session_state.get("pending_edit_eq")
+                saved_dest = st.session_state.get("pending_edit_dest")
                 execute(
                     "UPDATE bons SET date_bon=?, equipe=?, destination=? WHERE id=?",
                     (
-                        str(mod_date),
-                        mod_eq,
-                        mod_dest,
+                        str(saved_date),
+                        saved_eq,
+                        saved_dest,
                         selected_bon_id,
                     ),
                 )
+            
+            # Nettoyage de la session
             st.session_state.confirm_edit_bon = False
             st.success("Bon mis à jour !")
             st.rerun()
