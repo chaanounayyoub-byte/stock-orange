@@ -231,7 +231,6 @@ def init_db():
         """
     )
 
-    # Insertion des utilisateurs par défaut si vide
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
         cur.execute(
@@ -259,7 +258,6 @@ def init_db():
 
 
 def migrate_db():
-    """Ajoute dynamiquement les colonnes manquantes dans une BDD déjà existante."""
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(movements)")
@@ -674,7 +672,23 @@ with tabs[0]:
         c1.text_input("Date/Heure Saisie (Auto)", value=now_dt.strftime("%Y-%m-%d %H:%M:%S"), disabled=True)
         date_be = c2.date_input("Date Bon (<= Aujourd'hui)", value=date.today(), max_value=date.today())
 
-        auto_num_be = f"BE MW-{now_dt.strftime('%Y%m%d')}-01"
+        # Generation dynamique du N° BE
+        prefix_be = f"BE MW-{now_dt.strftime('%Y%m%d')}-"
+        last_be = query(
+            "SELECT number FROM bons WHERE type='BE' AND client=? AND number LIKE ? ORDER BY id DESC LIMIT 1",
+            (CLIENT, f"{prefix_be}%"),
+            one=True
+        )
+
+        if last_be:
+            try:
+                last_seq = int(last_be["number"].split("-")[-1])
+                auto_num_be = f"{prefix_be}{last_seq + 1:02d}"
+            except ValueError:
+                auto_num_be = f"{prefix_be}01"
+        else:
+            auto_num_be = f"{prefix_be}01"
+
         num_be = c3.text_input("N° BE", value=auto_num_be)
 
         c4, c5 = st.columns(2)
@@ -713,27 +727,30 @@ with tabs[0]:
             st.dataframe(pd.DataFrame(st.session_state.temp_be_items), use_container_width=True)
 
             def save_be():
-                bon_id = execute(
-                    "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,fournisseur,lieu_livraison,receptionne_par,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (
-                        "BE",
-                        num_be,
-                        CLIENT,
-                        str(date_be),
-                        now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                        fournisseur,
-                        lieu,
-                        CURRENT_USER["fullname"],
-                        CURRENT_USER["username"],
-                    ),
-                )
-                for item in st.session_state.temp_be_items:
-                    art_id = article_id_by_name(item["art"])
-                    execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
-                    set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) + item["qty"])
-                    add_movement(CLIENT, art_id, "BE", item["qty"], num_be, CURRENT_USER["username"], item["rem"], fournisseur=fournisseur)
-                st.session_state.temp_be_items = []
-                st.success("Bon d'Entrée enregistré !")
+                try:
+                    bon_id = execute(
+                        "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,fournisseur,lieu_livraison,receptionne_par,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (
+                            "BE",
+                            num_be,
+                            CLIENT,
+                            str(date_be),
+                            now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                            fournisseur,
+                            lieu,
+                            CURRENT_USER["fullname"],
+                            CURRENT_USER["username"],
+                        ),
+                    )
+                    for item in st.session_state.temp_be_items:
+                        art_id = article_id_by_name(item["art"])
+                        execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
+                        set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) + item["qty"])
+                        add_movement(CLIENT, art_id, "BE", item["qty"], num_be, CURRENT_USER["username"], item["rem"], fournisseur=fournisseur)
+                    st.session_state.temp_be_items = []
+                    st.success(f"Bon d'Entrée {num_be} enregistré avec succès !")
+                except sqlite3.IntegrityError:
+                    st.error(f"Erreur : Le numéro de bon '{num_be}' existe déjà. Veuillez modifier le numéro de bon.")
 
             b1, b2 = st.columns(2)
             if b1.button("💾 Enregistrer le Bon", use_container_width=True):
@@ -759,7 +776,23 @@ with tabs[1]:
         c1.text_input("Date/Heure Saisie (Auto)", value=now_dt.strftime("%Y-%m-%d %H:%M:%S"), disabled=True, key="bs_dt")
         date_bs = c2.date_input("Date Bon (<= Aujourd'hui)", value=date.today(), max_value=date.today(), key="bs_d")
 
-        auto_num_bs = f"BS MW-{now_dt.strftime('%Y%m%d')}-01"
+        # Generation dynamique du N° BS
+        prefix_bs = f"BS MW-{now_dt.strftime('%Y%m%d')}-"
+        last_bs = query(
+            "SELECT number FROM bons WHERE type='BS' AND client=? AND number LIKE ? ORDER BY id DESC LIMIT 1",
+            (CLIENT, f"{prefix_bs}%"),
+            one=True
+        )
+
+        if last_bs:
+            try:
+                last_seq = int(last_bs["number"].split("-")[-1])
+                auto_num_bs = f"{prefix_bs}{last_seq + 1:02d}"
+            except ValueError:
+                auto_num_bs = f"{prefix_bs}01"
+        else:
+            auto_num_bs = f"{prefix_bs}01"
+
         num_bs = c3.text_input("N° BS", value=auto_num_bs)
 
         c4, c5 = st.columns(2)
@@ -797,26 +830,29 @@ with tabs[1]:
             st.dataframe(pd.DataFrame(st.session_state.temp_bs_items), use_container_width=True)
 
             def save_bs():
-                bon_id = execute(
-                    "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,equipe,destination,created_by) VALUES (?,?,?,?,?,?,?,?)",
-                    (
-                        "BS",
-                        num_bs,
-                        CLIENT,
-                        str(date_bs),
-                        now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                        equipe,
-                        destination,
-                        CURRENT_USER["username"],
-                    ),
-                )
-                for item in st.session_state.temp_bs_items:
-                    art_id = article_id_by_name(item["art"])
-                    execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
-                    set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) - item["qty"])
-                    add_movement(CLIENT, art_id, "BS", item["qty"], num_bs, CURRENT_USER["username"], item["rem"], equipe=equipe)
-                st.session_state.temp_bs_items = []
-                st.success("Bon de Sortie enregistré !")
+                try:
+                    bon_id = execute(
+                        "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,equipe,destination,created_by) VALUES (?,?,?,?,?,?,?,?)",
+                        (
+                            "BS",
+                            num_bs,
+                            CLIENT,
+                            str(date_bs),
+                            now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                            equipe,
+                            destination,
+                            CURRENT_USER["username"],
+                        ),
+                    )
+                    for item in st.session_state.temp_bs_items:
+                        art_id = article_id_by_name(item["art"])
+                        execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
+                        set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) - item["qty"])
+                        add_movement(CLIENT, art_id, "BS", item["qty"], num_bs, CURRENT_USER["username"], item["rem"], equipe=equipe)
+                    st.session_state.temp_bs_items = []
+                    st.success(f"Bon de Sortie {num_bs} enregistré avec succès !")
+                except sqlite3.IntegrityError:
+                    st.error(f"Erreur : Le numéro de bon '{num_bs}' existe déjà. Veuillez modifier le numéro de bon.")
 
             b1, b2 = st.columns(2)
             if b1.button("💾 Enregistrer le BS", use_container_width=True):
@@ -866,7 +902,7 @@ with tabs[2]:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 📜 RUBRIQUE 4: HISTORIQUE & MODIFICATION (SÉCURISÉ)
+# 📜 RUBRIQUE 4: HISTORIQUE & MODIFICATION
 # ---------------------------------------------------------
 with tabs[3]:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
@@ -931,7 +967,6 @@ with tabs[3]:
     f_fourn = st.selectbox("Filtrer par Fournisseur", ["Tous"] + active_names("fournisseurs"))
     f_eq = st.selectbox("Filtrer par Équipe", ["Tous"] + active_names("equipes"))
 
-    # Requête SQL blindée
     sql_m = """
         SELECT 
             m.created_at AS Date, 
