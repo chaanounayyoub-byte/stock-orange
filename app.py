@@ -44,7 +44,7 @@ PERMISSIONS = {
     "coordinatrice": {"stock", "print"},
 }
 
-# Injection CSS — Respect strict des couleurs
+# Injection CSS
 st.markdown(
     """
     <style>
@@ -88,9 +88,9 @@ st.markdown(
             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
-        /* Styles spécifiques aux boutons */
+        /* Bouton rouge au départ */
         .btn-login > button, div[data-testid="stFormSubmitButton"] > button {
-            background-color: #DC2626 !important; /* Rouge au départ */
+            background-color: #DC2626 !important;
             color: #FFFFFF !important;
             border-radius: 8px !important;
             font-weight: 700 !important;
@@ -99,8 +99,9 @@ st.markdown(
             width: 100%;
         }
 
+        /* Bouton vert après connexion */
         .btn-login-success > button {
-            background-color: #10B981 !important; /* Vert après connexion */
+            background-color: #10B981 !important;
             color: #FFFFFF !important;
             border-radius: 8px !important;
             font-weight: 700 !important;
@@ -132,7 +133,7 @@ st.markdown(
         }
 
         button[aria-selected="true"] {
-            background-color: #10B981 !important; /* Vert Accent */
+            background-color: #10B981 !important;
             color: #FFFFFF !important;
         }
     </style>
@@ -142,7 +143,7 @@ st.markdown(
 
 
 # =========================================================
-# BASE DE DONNÉES (SQLite)
+# BASE DE DONNÉES & MIGRATION AUTOMATIQUE
 # =========================================================
 def get_conn():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -230,6 +231,7 @@ def init_db():
         """
     )
 
+    # Insertion des utilisateurs par défaut si vide
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
         cur.execute(
@@ -256,7 +258,24 @@ def init_db():
     conn.close()
 
 
+def migrate_db():
+    """Ajoute dynamiquement les colonnes manquantes dans une BDD déjà existante."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(movements)")
+    columns = [row[1] for row in cur.fetchall()]
+
+    if "fournisseur" not in columns:
+        cur.execute("ALTER TABLE movements ADD COLUMN fournisseur TEXT")
+    if "equipe" not in columns:
+        cur.execute("ALTER TABLE movements ADD COLUMN equipe TEXT")
+
+    conn.commit()
+    conn.close()
+
+
 init_db()
+migrate_db()
 
 
 # =========================================================
@@ -543,7 +562,6 @@ if not st.session_state.selected_client:
         unsafe_allow_html=True,
     )
 
-    # Grille des clients
     cols = st.columns(3)
     for idx, (client, info) in enumerate(CLIENTS.items()):
         with cols[idx]:
@@ -554,19 +572,6 @@ if not st.session_state.selected_client:
             else:
                 st.markdown(f"<h2 style='color:{info['color']}'>{client}</h2>", unsafe_allow_html=True)
 
-            # Bouton en gras avec la couleur du logo
-            st.markdown(
-                f"""
-                <style>
-                    div[data-testid="stBlock"] button[key="select_{client}"] {{
-                        background-color: {info['color']} !important;
-                        font-weight: bold !important;
-                        color: #FFFFFF !important;
-                    }}
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
             if st.button(f"ACCÈS AU STOCK {client.upper()}", key=f"select_{client}", use_container_width=True):
                 st.session_state.selected_client = client
                 st.rerun()
@@ -574,7 +579,6 @@ if not st.session_state.selected_client:
 
     st.markdown("---")
 
-    # Section Profil / Administration des Utilisateurs
     if can(ROLE, "manage_users"):
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.subheader("⚙️ Administration des Utilisateurs (Rôle Admin)")
@@ -616,7 +620,6 @@ if not st.session_state.selected_client:
         st.markdown("</div>", unsafe_allow_html=True)
 
     else:
-        # Utilisateur normal : Modification de son propre compte
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.subheader("👤 Mon Compte")
         with st.form("my_account_form"):
@@ -641,7 +644,7 @@ with h1:
     st.markdown(
         f"""
         <div class="main-header">
-            <div class="main-title">Gestion Stock MW NOMATIS — Espaces {CLIENT}</div>
+            <div class="main-title">Gestion Stock MW NOMATIS — Espace {CLIENT}</div>
             <div class="subtitle">Utilisateur : {CURRENT_USER['fullname']} ({ROLE.upper()})</div>
         </div>
         """,
@@ -656,7 +659,6 @@ with h2:
         st.session_state.selected_client = None
         st.rerun()
 
-# 5 Rubriques obligatoires
 tabs = st.tabs(["📥 BE", "📤 BS", "📊 Situation Stock", "📜 Historique", "⚙️ Configuration"])
 
 # ---------------------------------------------------------
@@ -696,7 +698,6 @@ with tabs[0]:
             if not fournisseur:
                 st.error("Le champ Fournisseur est obligatoire.")
             else:
-                # Regroupement si même article
                 found = False
                 for item in st.session_state.temp_be_items:
                     if item["art"] == art and item["ref"] == ref:
@@ -777,7 +778,6 @@ with tabs[1]:
             art_id = article_id_by_name(art)
             stk_dispo = current_stock(CLIENT, art_id)
 
-            # Calcul quantité déjà en panier temporaire
             in_cart = sum(item["qty"] for item in st.session_state.temp_bs_items if item["art"] == art)
             if (qty + in_cart) > stk_dispo:
                 st.error(f"Quantité insuffisante ! Stock dispo : {stk_dispo} (En panier: {in_cart})")
@@ -857,7 +857,6 @@ with tabs[2]:
         c2.metric("Total Unités en Stock", int(df_stock["Stock_Actuel"].sum()))
         st.dataframe(df_stock, use_container_width=True, hide_index=True)
 
-        # Impression / Export
         st.download_button(
             "🖨️ Exporter / Imprimer Situation Stock (CSV)",
             df_stock.to_csv(index=False).encode("utf-8"),
@@ -867,7 +866,7 @@ with tabs[2]:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 📜 RUBRIQUE 4: HISTORIQUE & MODIFICATION
+# 📜 RUBRIQUE 4: HISTORIQUE & MODIFICATION (SÉCURISÉ)
 # ---------------------------------------------------------
 with tabs[3]:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
@@ -892,7 +891,6 @@ with tabs[3]:
             docx_b = generate_docx(selected_id)
             st.download_button("📝 Imprimer / Télécharger en Word (.docx)", docx_b, file_name=f"{b_data['number']}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
-        # Modification & Suppression (Magasinier & Admin)
         if can(ROLE, "edit"):
             st.markdown("---")
             st.markdown("##### Options de Modification / Suppression")
@@ -919,7 +917,6 @@ with tabs[3]:
                 items_to_revert = query("SELECT * FROM bon_items WHERE bon_id=?", (selected_id,))
                 for it in items_to_revert:
                     stk = current_stock(CLIENT, it["article_id"])
-                    # Restauration stock
                     new_qty = stk - it["quantity"] if b_type == "BE" else stk + it["quantity"]
                     set_stock(CLIENT, it["article_id"], new_qty)
                 execute("DELETE FROM bons WHERE id=?", (selected_id,))
@@ -934,20 +931,37 @@ with tabs[3]:
     f_fourn = st.selectbox("Filtrer par Fournisseur", ["Tous"] + active_names("fournisseurs"))
     f_eq = st.selectbox("Filtrer par Équipe", ["Tous"] + active_names("equipes"))
 
-    sql_m = "SELECT m.created_at AS Date, m.movement_type AS Type, m.reference_bon AS Bon, a.name AS Article, m.quantity AS Qte, m.fournisseur, m.equipe, m.username AS Operateur FROM movements m JOIN articles a ON a.id=m.article_id WHERE m.client=?"
+    # Requête SQL blindée
+    sql_m = """
+        SELECT 
+            m.created_at AS Date, 
+            m.movement_type AS Type, 
+            m.reference_bon AS Bon, 
+            a.name AS Article, 
+            m.quantity AS Qte, 
+            COALESCE(m.fournisseur, '-') AS Fournisseur, 
+            COALESCE(m.equipe, '-') AS Equipe, 
+            m.username AS Operateur 
+        FROM movements m 
+        JOIN articles a ON a.id = m.article_id 
+        WHERE m.client = ?
+    """
     params = [CLIENT]
 
     if f_fourn != "Tous":
-        sql_m += " AND m.fournisseur=?"
+        sql_m += " AND m.fournisseur = ?"
         params.append(f_fourn)
     if f_eq != "Tous":
-        sql_m += " AND m.equipe=?"
+        sql_m += " AND m.equipe = ?"
         params.append(f_eq)
 
     sql_m += " ORDER BY m.id DESC"
     movs = query(sql_m, tuple(params))
+    
     if movs:
         st.dataframe(pd.DataFrame([dict(m) for m in movs]), use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucun mouvement trouvé.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -961,7 +975,6 @@ with tabs[4]:
 
         col_a, col_b, col_c = st.columns(3)
 
-        # 1. Articles & Quantités
         with col_a:
             st.markdown("##### Gérer les Articles")
             with st.form("add_art_form"):
@@ -976,7 +989,6 @@ with tabs[4]:
                         st.success("Article ajouté !")
                         st.rerun()
 
-        # 2. Fournisseurs
         with col_b:
             st.markdown("##### Gérer les Fournisseurs")
             with st.form("add_fourn_form"):
@@ -987,7 +999,6 @@ with tabs[4]:
                         st.success("Fournisseur ajouté !")
                         st.rerun()
 
-        # 3. Équipes
         with col_c:
             st.markdown("##### Gérer les Équipes")
             with st.form("add_eq_form"):
