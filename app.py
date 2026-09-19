@@ -10,20 +10,13 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    SimpleDocTemplate,
-    Table,
-    TableStyle,
-    Paragraph,
-    Spacer,
-    Image as RLImage
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
 )
 from docx import Document
 
-
 # =========================================================
-# CONFIGURATION
+# CONFIGURATION & THÈME BLEU / BLANC / VERT / ROUGE
 # =========================================================
-
 st.set_page_config(
     page_title="Gestion Stock MW NOMATIS",
     page_icon="📡",
@@ -34,109 +27,43 @@ st.set_page_config(
 APP_TITLE = "Gestion Stock MW NOMATIS"
 DB_FILE = "stock_mw.db"
 
-# =========================================================
-# LOGOS
-# =========================================================
-
-NOMATIS_LOGO = "Logo Nomatis.jpg"
-
 CLIENTS = {
-    "Orange": {
-        "logo": "Orange_logo.svg.webp",
-        "color": "#FF6600"
-    },
-    "Inwi": {
-        "logo": "Logo INWI.jpg",
-        "color": "#A1006B"
-    },
-    "ZTE": {
-        "logo": "Logo ZTE.jpg",
-        "color": "#005BAC"
-    },
+    "Orange": {"logo": "Orange_logo.svg.webp", "color": "#FF6600"},
+    "Inwi": {"logo": "Logo INWI.jpg", "color": "#A1006B"},
+    "ZTE": {"logo": "Logo ZTE.jpg", "color": "#005BAC"},
 }
 
-DEFAULT_ARTICLES = [
-    "Câble IF",
-    "Câble RJ45",
-    "Support 0.3 m",
-    "Support 0.6 m",
-    "ODU 18GHz",
-    "Antenne 0.6m"
-]
-
-DEFAULT_FOURNISSEURS = [
-    "NEC",
-    "ZTE",
-    "Intégral",
-    "FO Connect"
-]
-
-DEFAULT_EQUIPES = [
-    "Nabil Team",
-    "Yassine Team",
-    "Issam Team"
-]
+DEFAULT_ARTICLES = ["Câble IF", "Câble RJ45", "Support 0.3 m", "Support 0.6 m", "ODU 18GHz", "Antenne 0.6m"]
+DEFAULT_FOURNISSEURS = ["NEC", "ZTE", "Intégral", "FO Connect"]
+DEFAULT_EQUIPES = ["Nabil Team", "Yassine Team", "Issam Team"]
 
 PERMISSIONS = {
-    "admin": {
-        "be",
-        "bs",
-        "stock",
-        "edit",
-        "config",
-        "manage_users"
-    },
-    "magasinier": {
-        "be",
-        "bs",
-        "stock",
-        "edit"
-    },
-    "coordinateur": {
-        "stock",
-        "print"
-    },
-    "coordinatrice": {
-        "stock",
-        "print"
-    },
+    "admin": {"be", "bs", "stock", "edit", "config", "manage_users"},
+    "magasinier": {"be", "bs", "stock", "edit"},
+    "coordinateur": {"stock", "print"},
+    "coordinatrice": {"stock", "print"},
 }
 
-
-# =========================================================
-# CSS
-# =========================================================
-
+# Injection CSS
 st.markdown(
     """
     <style>
-
-        @import url(
-            'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
-        );
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         html, body, [class*="css"] {
-            font-family: 'Inter',
-                         -apple-system,
-                         BlinkMacSystemFont,
-                         sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: #F4F7FA !important;
             color: #0F172A !important;
         }
 
         .main-header {
-            background: linear-gradient(
-                135deg,
-                #1E3A8A 0%,
-                #2563EB 100%
-            );
+            background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
             border-bottom: 4px solid #10B981;
             border-radius: 12px;
-            padding: 18px 24px;
+            padding: 20px 28px;
             margin-bottom: 24px;
             color: #FFFFFF !important;
-            box-shadow:
-                0 4px 6px -1px rgba(0, 0, 0, 0.10);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
         .main-title {
@@ -158,34 +85,11 @@ st.markdown(
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 20px;
-            box-shadow:
-                0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
-        .login-logo {
-            text-align: center;
-            margin-bottom: 15px;
-        }
-
-        .login-logo img {
-            max-width: 220px;
-            max-height: 90px;
-            object-fit: contain;
-        }
-
-        .client-logo {
-            text-align: center;
-            padding: 10px;
-        }
-
-        .client-logo img {
-            max-width: 220px;
-            max-height: 100px;
-            object-fit: contain;
-        }
-
-        .btn-login > button,
-        div[data-testid="stFormSubmitButton"] > button {
+        /* Bouton rouge au départ */
+        .btn-login > button, div[data-testid="stFormSubmitButton"] > button {
             background-color: #DC2626 !important;
             color: #FFFFFF !important;
             border-radius: 8px !important;
@@ -195,6 +99,7 @@ st.markdown(
             width: 100%;
         }
 
+        /* Bouton vert après connexion */
         .btn-login-success > button {
             background-color: #10B981 !important;
             color: #FFFFFF !important;
@@ -231,7 +136,6 @@ st.markdown(
             background-color: #10B981 !important;
             color: #FFFFFF !important;
         }
-
     </style>
     """,
     unsafe_allow_html=True,
@@ -239,27 +143,17 @@ st.markdown(
 
 
 # =========================================================
-# BASE DE DONNÉES
+# BASE DE DONNÉES & MIGRATION AUTOMATIQUE
 # =========================================================
-
 def get_conn():
-    conn = sqlite3.connect(
-        DB_FILE,
-        check_same_thread=False
-    )
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-
-    # Important pour ON DELETE CASCADE
-    conn.execute("PRAGMA foreign_keys = ON")
-
     return conn
 
 
 def init_db():
-
     conn = get_conn()
     cur = conn.cursor()
-
     cur.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -318,9 +212,7 @@ def init_db():
             reference TEXT,
             quantity INTEGER NOT NULL,
             remarque TEXT,
-            FOREIGN KEY(bon_id)
-                REFERENCES bons(id)
-                ON DELETE CASCADE
+            FOREIGN KEY(bon_id) REFERENCES bons(id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS movements (
@@ -339,89 +231,42 @@ def init_db():
         """
     )
 
-    # Utilisateurs par défaut
     cur.execute("SELECT COUNT(*) FROM users")
-
     if cur.fetchone()[0] == 0:
-
         cur.execute(
             "INSERT INTO users VALUES (?,?,?,?,?)",
-            (
-                "admin",
-                "admin123",
-                "Administrateur Système",
-                "admin",
-                "Jamais"
-            )
+            ("admin", "admin123", "Administrateur Système", "admin", "Jamais"),
         )
-
         cur.execute(
             "INSERT INTO users VALUES (?,?,?,?,?)",
-            (
-                "magasinier",
-                "123",
-                "Magasinier Principal",
-                "magasinier",
-                "Jamais"
-            )
+            ("magasinier", "123", "Magasinier Principal", "magasinier", "Jamais"),
         )
-
         cur.execute(
             "INSERT INTO users VALUES (?,?,?,?,?)",
-            (
-                "coord",
-                "123",
-                "Coordinateur Projet",
-                "coordinateur",
-                "Jamais"
-            )
+            ("coord", "123", "Coordinateur Projet", "coordinateur", "Jamais"),
         )
 
-    # Articles
     for name in DEFAULT_ARTICLES:
-        cur.execute(
-            "INSERT OR IGNORE INTO articles(name,active) VALUES(?,1)",
-            (name,)
-        )
-
-    # Fournisseurs
+        cur.execute("INSERT OR IGNORE INTO articles(name,active) VALUES(?,1)", (name,))
     for name in DEFAULT_FOURNISSEURS:
-        cur.execute(
-            "INSERT OR IGNORE INTO fournisseurs(name,active) VALUES(?,1)",
-            (name,)
-        )
-
-    # Equipes
+        cur.execute("INSERT OR IGNORE INTO fournisseurs(name,active) VALUES(?,1)", (name,))
     for name in DEFAULT_EQUIPES:
-        cur.execute(
-            "INSERT OR IGNORE INTO equipes(name,active) VALUES(?,1)",
-            (name,)
-        )
+        cur.execute("INSERT OR IGNORE INTO equipes(name,active) VALUES(?,1)", (name,))
 
     conn.commit()
     conn.close()
 
 
 def migrate_db():
-
     conn = get_conn()
     cur = conn.cursor()
-
     cur.execute("PRAGMA table_info(movements)")
-    columns = [
-        row[1]
-        for row in cur.fetchall()
-    ]
+    columns = [row[1] for row in cur.fetchall()]
 
     if "fournisseur" not in columns:
-        cur.execute(
-            "ALTER TABLE movements ADD COLUMN fournisseur TEXT"
-        )
-
+        cur.execute("ALTER TABLE movements ADD COLUMN fournisseur TEXT")
     if "equipe" not in columns:
-        cur.execute(
-            "ALTER TABLE movements ADD COLUMN equipe TEXT"
-        )
+        cur.execute("ALTER TABLE movements ADD COLUMN equipe TEXT")
 
     conn.commit()
     conn.close()
@@ -432,2883 +277,791 @@ migrate_db()
 
 
 # =========================================================
-# UTILITAIRES
+# UTILITAIRES & REQUÊTES
 # =========================================================
-
 def query(sql, params=(), one=False):
-
     conn = get_conn()
-
-    cur = conn.execute(
-        sql,
-        params
-    )
-
+    cur = conn.execute(sql, params)
     rows = cur.fetchall()
-
     conn.close()
-
-    if one:
-        return rows[0] if rows else None
-
-    return rows
+    return rows[0] if one and rows else (None if one else rows)
 
 
 def execute(sql, params=()):
-
     conn = get_conn()
-
-    cur = conn.execute(
-        sql,
-        params
-    )
-
+    cur = conn.execute(sql, params)
     conn.commit()
-
     last_id = cur.lastrowid
-
     conn.close()
-
     return last_id
 
 
 def active_names(table):
-
-    rows = query(
-        f"""
-        SELECT name
-        FROM {table}
-        WHERE active=1
-        ORDER BY name
-        """
-    )
-
-    return [
-        r["name"]
-        for r in rows
-    ]
+    rows = query(f"SELECT name FROM {table} WHERE active=1 ORDER BY name")
+    return [r["name"] for r in rows]
 
 
 def article_id_by_name(name):
-
-    row = query(
-        "SELECT id FROM articles WHERE name=?",
-        (name,),
-        one=True
-    )
-
+    row = query("SELECT id FROM articles WHERE name=?", (name,), one=True)
     return row["id"] if row else None
 
 
 def current_stock(client, article_id):
-
-    row = query(
-        """
-        SELECT quantity
-        FROM stock
-        WHERE client=? AND article_id=?
-        """,
-        (
-            client,
-            article_id
-        ),
-        one=True
-    )
-
+    row = query("SELECT quantity FROM stock WHERE client=? AND article_id=?", (client, article_id), one=True)
     return int(row["quantity"]) if row else 0
 
 
 def set_stock(client, article_id, quantity):
-
     execute(
         """
-        INSERT INTO stock(
-            client,
-            article_id,
-            quantity
-        )
-        VALUES(?,?,?)
-
-        ON CONFLICT(client, article_id)
-        DO UPDATE SET
-            quantity=excluded.quantity
+        INSERT INTO stock(client,article_id,quantity) VALUES(?,?,?)
+        ON CONFLICT(client,article_id) DO UPDATE SET quantity=excluded.quantity
         """,
-        (
-            client,
-            article_id,
-            max(0, int(quantity))
-        )
+        (client, article_id, max(0, int(quantity))),
     )
 
 
-def add_movement(
-    client,
-    article_id,
-    m_type,
-    qty,
-    ref_bon,
-    user,
-    comment="",
-    fournisseur="",
-    equipe=""
-):
-
+def add_movement(client, article_id, m_type, qty, ref_bon, user, comment="", fournisseur="", equipe=""):
     execute(
         """
-        INSERT INTO movements(
-            client,
-            article_id,
-            movement_type,
-            quantity,
-            reference_bon,
-            username,
-            created_at,
-            comment,
-            fournisseur,
-            equipe
-        )
+        INSERT INTO movements(client,article_id,movement_type,quantity,reference_bon,username,created_at,comment,fournisseur,equipe)
         VALUES(?,?,?,?,?,?,?,?,?,?)
         """,
-        (
-            client,
-            article_id,
-            m_type,
-            int(qty),
-            ref_bon,
-            user,
-            datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-            comment,
-            fournisseur,
-            equipe
-        )
+        (client, article_id, m_type, int(qty), ref_bon, user, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), comment, fournisseur, equipe),
     )
 
 
 def user_info(username):
-
-    return query(
-        """
-        SELECT *
-        FROM users
-        WHERE username=?
-        """,
-        (username,),
-        one=True
-    )
+    return query("SELECT * FROM users WHERE username=?", (username,), one=True)
 
 
 def can(role, permission):
-
-    return permission in PERMISSIONS.get(
-        role,
-        set()
-    )
+    return permission in PERMISSIONS.get(role, set())
 
 
-# =========================================================
-# GESTION DES LOGOS
-# =========================================================
-
-def normalized_logo(
-    path,
-    size=(250, 100)
-):
-
+def normalized_logo(path, size=(250, 100)):
     if not os.path.exists(path):
         return None
-
     try:
-
         img = Image.open(path).convert("RGB")
-
-        canvas = Image.new(
-            "RGB",
-            size,
-            "#FFFFFF"
-        )
-
-        contained = ImageOps.contain(
-            img,
-            size
-        )
-
-        x = (
-            size[0]
-            - contained.width
-        ) // 2
-
-        y = (
-            size[1]
-            - contained.height
-        ) // 2
-
-        canvas.paste(
-            contained,
-            (x, y)
-        )
-
+        canvas = Image.new("RGB", size, "#FFFFFF")
+        contained = ImageOps.contain(img, size)
+        x = (size[0] - contained.width) // 2
+        y = (size[1] - contained.height) // 2
+        canvas.paste(contained, (x, y))
         return canvas
-
     except Exception:
         return None
 
 
-def logo_exists(path):
-
-    return (
-        path
-        and os.path.exists(path)
-    )
-
-
 # =========================================================
-# MODALE CONFIRMATION
+# MODALES DE CONFIRMATION (DIALOG)
 # =========================================================
-
 @st.dialog("⚠️ Confirmation requise")
-def confirm_action_dialog(
-    message,
-    callback,
-    *args
-):
-
+def confirm_action_dialog(message, callback, *args):
     st.write(message)
-
     col1, col2 = st.columns(2)
-
-    if col1.button(
-        "✅ Oui, Confirmer",
-        use_container_width=True
-    ):
-
+    if col1.button("✅ Oui, Confirmer", use_container_width=True):
         callback(*args)
-
         st.rerun()
-
-    if col2.button(
-        "❌ Annuler",
-        use_container_width=True
-    ):
-
+    if col2.button("❌ Annuler", use_container_width=True):
         st.rerun()
 
 
 # =========================================================
-# PDF
+# GÉNÉRATION DE DOCUMENTS (PDF & DOCX)
 # =========================================================
-
 def generate_pdf(bon_id):
-
-    bon = query(
-        "SELECT * FROM bons WHERE id=?",
-        (bon_id,),
-        one=True
-    )
-
+    bon = query("SELECT * FROM bons WHERE id=?", (bon_id,), one=True)
     items = query(
-        """
-        SELECT
-            bi.*,
-            a.name AS article
-        FROM bon_items bi
-        JOIN articles a
-            ON a.id=bi.article_id
-        WHERE bi.bon_id=?
-        """,
-        (bon_id,)
+        "SELECT bi.*, a.name AS article FROM bon_items bi JOIN articles a ON a.id=bi.article_id WHERE bi.bon_id=?",
+        (bon_id,),
     )
-
     buffer = BytesIO()
-
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=15 * mm,
-        leftMargin=15 * mm,
-        topMargin=15 * mm,
-        bottomMargin=15 * mm
-    )
-
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15 * mm, leftMargin=15 * mm, topMargin=15 * mm, bottomMargin=15 * mm)
     styles = getSampleStyleSheet()
-
     story = []
 
-    # -----------------------------------------------------
-    # LOGOS PDF
-    # -----------------------------------------------------
+    logo_info = CLIENTS.get(bon["client"], {})
+    logo_path = logo_info.get("logo")
 
-    client_logo_path = CLIENTS.get(
-        bon["client"],
-        {}
-    ).get("logo")
-
-    header_cells = []
-
-    # Logo client
-    if logo_exists(client_logo_path):
-
+    header_data = []
+    if logo_path and os.path.exists(logo_path):
         try:
-
-            client_img = RLImage(
-                client_logo_path,
-                width=38 * mm,
-                height=18 * mm
-            )
-
+            img_rl = RLImage(logo_path, width=40 * mm, height=18 * mm)
+            header_data.append([img_rl, Paragraph("<font size=16 color='#1E3A8A'><b>Gestion Stock MW NOMATIS</b></font>", styles["Normal"])])
         except Exception:
-
-            client_img = Paragraph(
-                bon["client"],
-                styles["Normal"]
-            )
-
+            header_data.append([Paragraph("<font size=16 color='#1E3A8A'><b>NOMATIS</b></font>", styles["Normal"])])
     else:
+        header_data.append([Paragraph("<font size=16 color='#1E3A8A'><b>NOMATIS</b></font>", styles["Normal"])])
 
-        client_img = Paragraph(
-            bon["client"],
-            styles["Normal"]
-        )
-
-    # Logo NOMATIS
-    if logo_exists(NOMATIS_LOGO):
-
-        try:
-
-            nomatis_img = RLImage(
-                NOMATIS_LOGO,
-                width=38 * mm,
-                height=18 * mm
-            )
-
-        except Exception:
-
-            nomatis_img = Paragraph(
-                "NOMATIS",
-                styles["Normal"]
-            )
-
-    else:
-
-        nomatis_img = Paragraph(
-            "<b>NOMATIS</b>",
-            styles["Normal"]
-        )
-
-    header_data = [[
-        nomatis_img,
-        Paragraph(
-            """
-            <font size=15 color="#1E3A8A">
-            <b>GESTION STOCK MW</b>
-            </font>
-            <br/>
-            <font size=10 color="#64748B">
-            Bon de gestion de stock
-            </font>
-            """,
-            styles["Normal"]
-        ),
-        client_img
-    ]]
-
-    header_table = Table(
-        header_data,
-        colWidths=[
-            45 * mm,
-            90 * mm,
-            45 * mm
-        ]
-    )
-
-    header_table.setStyle(
-        TableStyle(
-            [
-                (
-                    "VALIGN",
-                    (0, 0),
-                    (-1, -1),
-                    "MIDDLE"
-                ),
-                (
-                    "ALIGN",
-                    (0, 0),
-                    (0, 0),
-                    "LEFT"
-                ),
-                (
-                    "ALIGN",
-                    (2, 0),
-                    (2, 0),
-                    "RIGHT"
-                ),
-            ]
-        )
-    )
-
+    header_table = Table(header_data, colWidths=[50 * mm, 130 * mm])
+    header_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
     story.append(header_table)
+    story.append(Spacer(1, 10))
 
-    story.append(
-        Spacer(1, 10)
-    )
-
-    # -----------------------------------------------------
-    # TITRE
-    # -----------------------------------------------------
-
-    title = (
-        "BON D'ENTRÉE (BE)"
-        if bon["type"] == "BE"
-        else "BON DE SORTIE (BS)"
-    )
-
-    story.append(
-        Paragraph(
-            f"""
-            <font size=18 color="#2563EB">
-            <b>{title} — {bon['number']}</b>
-            </font>
-            """,
-            styles["Title"]
-        )
-    )
-
-    story.append(
-        Spacer(1, 10)
-    )
-
-    # -----------------------------------------------------
-    # INFORMATIONS
-    # -----------------------------------------------------
+    title = "BON D'ENTRÉE (BE)" if bon["type"] == "BE" else "BON DE SORTIE (BS)"
+    story.append(Paragraph(f"<font size=18 color='#2563EB'><b>{title} — {bon['number']}</b></font>", styles["Title"]))
+    story.append(Spacer(1, 10))
 
     if bon["type"] == "BE":
-
         info = [
-            [
-                "N° Bon",
-                bon["number"],
-                "Date / Heure Saisie",
-                bon["datetime_saisie"]
-            ],
-            [
-                "Date du Bon",
-                bon["date_bon"],
-                "Fournisseur",
-                bon["fournisseur"] or ""
-            ],
-            [
-                "Réceptionné par",
-                bon["receptionne_par"] or "",
-                "Client / Projet",
-                bon["client"]
-            ],
-            [
-                "Lieu Livraison",
-                bon["lieu_livraison"] or "",
-                "",
-                ""
-            ],
+            ["N° Bon", bon["number"], "Date / Heure Saisie", bon["datetime_saisie"]],
+            ["Date du Bon", bon["date_bon"], "Fournisseur", bon["fournisseur"] or ""],
+            ["Réceptionné par", bon["receptionne_par"] or "", "Client / Projet", bon["client"]],
+            ["Lieu Livraison", bon["lieu_livraison"] or "", "", ""],
         ]
-
     else:
-
         info = [
-            [
-                "N° Bon",
-                bon["number"],
-                "Date / Heure Saisie",
-                bon["datetime_saisie"]
-            ],
-            [
-                "Date du Bon",
-                bon["date_bon"],
-                "Équipe Destination",
-                bon["equipe"] or ""
-            ],
-            [
-                "Saisi par",
-                bon["created_by"],
-                "Destination / Site",
-                bon["destination"] or ""
-            ],
-            [
-                "Client / Projet",
-                bon["client"],
-                "",
-                ""
-            ],
+            ["N° Bon", bon["number"], "Date / Heure Saisie", bon["datetime_saisie"]],
+            ["Date du Bon", bon["date_bon"], "Équipe Destination", bon["equipe"] or ""],
+            ["Saisi par", bon["created_by"], "Destination / Site", bon["destination"] or ""],
+            ["Client / Projet", bon["client"], "", ""],
         ]
 
-    info_table = Table(
-        info,
-        colWidths=[
-            35 * mm,
-            55 * mm,
-            35 * mm,
-            55 * mm
-        ]
-    )
-
+    info_table = Table(info, colWidths=[35 * mm, 55 * mm, 35 * mm, 55 * mm])
     info_table.setStyle(
         TableStyle(
             [
-                (
-                    "GRID",
-                    (0, 0),
-                    (-1, -1),
-                    0.5,
-                    colors.HexColor("#CBD5E1")
-                ),
-                (
-                    "BACKGROUND",
-                    (0, 0),
-                    (0, -1),
-                    colors.HexColor("#F1F5F9")
-                ),
-                (
-                    "BACKGROUND",
-                    (2, 0),
-                    (2, -1),
-                    colors.HexColor("#F1F5F9")
-                ),
-                (
-                    "FONTNAME",
-                    (0, 0),
-                    (-1, -1),
-                    "Helvetica-Bold"
-                ),
-                (
-                    "PADDING",
-                    (0, 0),
-                    (-1, -1),
-                    5
-                ),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F1F5F9")),
+                ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#F1F5F9")),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("PADDING", (0, 0), (-1, -1), 5),
             ]
         )
     )
-
     story.append(info_table)
+    story.append(Spacer(1, 15))
 
-    story.append(
-        Spacer(1, 15)
-    )
-
-    # -----------------------------------------------------
-    # ARTICLES
-    # -----------------------------------------------------
-
-    data = [
-        [
-            "Référence",
-            "Désignation Article",
-            "Quantité",
-            "Remarque"
-        ]
-    ]
-
+    data = [["Référence", "Désignation Article", "Quantité", "Remarque"]]
     for item in items:
+        data.append([item["reference"] or "-", item["article"], str(item["quantity"]), item["remarque"] or "-"])
 
-        data.append(
-            [
-                item["reference"] or "-",
-                item["article"],
-                str(item["quantity"]),
-                item["remarque"] or "-"
-            ]
-        )
-
-    items_table = Table(
-        data,
-        colWidths=[
-            35 * mm,
-            70 * mm,
-            25 * mm,
-            50 * mm
-        ]
-    )
-
+    items_table = Table(data, colWidths=[35 * mm, 70 * mm, 25 * mm, 50 * mm])
     items_table.setStyle(
         TableStyle(
             [
-                (
-                    "BACKGROUND",
-                    (0, 0),
-                    (-1, 0),
-                    colors.HexColor("#2563EB")
-                ),
-                (
-                    "TEXTCOLOR",
-                    (0, 0),
-                    (-1, 0),
-                    colors.white
-                ),
-                (
-                    "GRID",
-                    (0, 0),
-                    (-1, -1),
-                    0.5,
-                    colors.HexColor("#E2E8F0")
-                ),
-                (
-                    "ALIGN",
-                    (2, 1),
-                    (2, -1),
-                    "CENTER"
-                ),
-                (
-                    "PADDING",
-                    (0, 0),
-                    (-1, -1),
-                    6
-                ),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563EB")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("ALIGN", (2, 1), (2, -1), "CENTER"),
+                ("PADDING", (0, 0), (-1, -1), 6),
             ]
         )
     )
-
     story.append(items_table)
-
-    story.append(
-        Spacer(1, 15)
-    )
-
-    # Signature
-    signature = Table(
-        [
-            [
-                Paragraph(
-                    "<b>Signature NOMATIS</b>",
-                    styles["Normal"]
-                ),
-                Paragraph(
-                    "<b>Signature Client / Équipe</b>",
-                    styles["Normal"]
-                )
-            ],
-            [
-                "",
-                ""
-            ]
-        ],
-        colWidths=[
-            90 * mm,
-            90 * mm
-        ],
-        rowHeights=[
-            8 * mm,
-            25 * mm
-        ]
-    )
-
-    signature.setStyle(
-        TableStyle(
-            [
-                (
-                    "GRID",
-                    (0, 0),
-                    (-1, -1),
-                    0.5,
-                    colors.HexColor("#CBD5E1")
-                ),
-                (
-                    "ALIGN",
-                    (0, 0),
-                    (-1, 0),
-                    "CENTER"
-                ),
-                (
-                    "VALIGN",
-                    (0, 0),
-                    (-1, -1),
-                    "MIDDLE"
-                )
-            ]
-        )
-    )
-
-    story.append(signature)
-
     doc.build(story)
-
     buffer.seek(0)
-
     return buffer.getvalue()
 
 
-# =========================================================
-# DOCX
-# =========================================================
-
 def generate_docx(bon_id):
-
-    bon = query(
-        "SELECT * FROM bons WHERE id=?",
-        (bon_id,),
-        one=True
-    )
-
+    bon = query("SELECT * FROM bons WHERE id=?", (bon_id,), one=True)
     items = query(
-        """
-        SELECT
-            bi.*,
-            a.name AS article
-        FROM bon_items bi
-        JOIN articles a
-            ON a.id=bi.article_id
-        WHERE bi.bon_id=?
-        """,
-        (bon_id,)
+        "SELECT bi.*, a.name AS article FROM bon_items bi JOIN articles a ON a.id=bi.article_id WHERE bi.bon_id=?",
+        (bon_id,),
     )
-
     doc = Document()
-
-    # Logo NOMATIS dans Word
-    if logo_exists(NOMATIS_LOGO):
-
-        try:
-
-            paragraph = doc.add_paragraph()
-
-            run = paragraph.add_run()
-
-            run.add_picture(
-                NOMATIS_LOGO,
-                width=None
-            )
-
-            paragraph.alignment = 1
-
-        except Exception:
-            pass
-
-    doc.add_heading(
-        f"""
-        BON DE {'ENTRÉE' if bon['type'] == 'BE' else 'SORTIE'}
-        - {bon['number']}
-        """,
-        level=1
-    )
-
+    doc.add_heading(f"BON DE {'ENTRÉE' if bon['type']=='BE' else 'SORTIE'} - {bon['number']}", level=1)
     p = doc.add_paragraph()
+    p.add_run(f"Client / Projet : {bon['client']}\nDate Bon : {bon['date_bon']}\nSaisie le : {bon['datetime_saisie']}\nOpérateur : {bon['created_by']}")
 
-    p.add_run(
-        f"Client / Projet : {bon['client']}\n"
-        f"Date Bon : {bon['date_bon']}\n"
-        f"Saisie le : {bon['datetime_saisie']}\n"
-        f"Opérateur : {bon['created_by']}"
-    )
-
-    table = doc.add_table(
-        rows=1,
-        cols=4
-    )
-
+    table = doc.add_table(rows=1, cols=4)
     table.style = "Table Grid"
-
     hdr_cells = table.rows[0].cells
-
     hdr_cells[0].text = "Référence"
     hdr_cells[1].text = "Article"
     hdr_cells[2].text = "Quantité"
     hdr_cells[3].text = "Remarque"
 
     for item in items:
-
         row_cells = table.add_row().cells
-
-        row_cells[0].text = (
-            item["reference"] or ""
-        )
-
+        row_cells[0].text = item["reference"] or ""
         row_cells[1].text = item["article"]
-
-        row_cells[2].text = str(
-            item["quantity"]
-        )
-
-        row_cells[3].text = (
-            item["remarque"] or ""
-        )
+        row_cells[2].text = str(item["quantity"])
+        row_cells[3].text = item["remarque"] or ""
 
     buffer = BytesIO()
-
     doc.save(buffer)
-
     buffer.seek(0)
-
     return buffer.getvalue()
 
 
 # =========================================================
-# SESSION
+# SESSION & AUTHENTIFICATION
 # =========================================================
-
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
-
 if "selected_client" not in st.session_state:
     st.session_state.selected_client = None
-
 if "temp_be_items" not in st.session_state:
     st.session_state.temp_be_items = []
-
 if "temp_bs_items" not in st.session_state:
     st.session_state.temp_bs_items = []
 
 
-# =========================================================
-# LOGIN
-# =========================================================
-
 def login_screen():
-
-    st.markdown(
-        "<br>",
-        unsafe_allow_html=True
-    )
-
-    _, col, _ = st.columns(
-        [1, 1.8, 1]
-    )
-
+    st.markdown("<br>", unsafe_allow_html=True)
+    _, col, _ = st.columns([1, 1.8, 1])
     with col:
-
-        # Logo NOMATIS
-        if logo_exists(NOMATIS_LOGO):
-
-            logo = normalized_logo(
-                NOMATIS_LOGO,
-                size=(300, 120)
-            )
-
-            if logo:
-
-                st.markdown(
-                    '<div class="login-logo">',
-                    unsafe_allow_html=True
-                )
-
-                st.image(
-                    logo,
-                    use_container_width=True
-                )
-
-                st.markdown(
-                    '</div>',
-                    unsafe_allow_html=True
-                )
-
         st.markdown(
             """
-            <div class="glass-card"
-                 style="
-                    text-align:center;
-                    border-top:5px solid #2563EB;
-                 ">
-
-                <h1 style="
-                    color:#1E3A8A;
-                    margin-bottom:0px;
-                    font-weight:800;
-                ">
-                    Gestion Stock MW NOMATIS
-                </h1>
-
-                <p style="
-                    color:#10B981;
-                    font-weight:600;
-                    font-size:15px;
-                ">
-                    Plateforme Sécurisée d'Ingénierie & Logistique
-                </p>
-
+            <div class="glass-card" style="text-align: center; border-top: 5px solid #2563EB;">
+                <h1 style="color: #1E3A8A; margin-bottom: 0px; font-weight: 800;">Gestion Stock MW NOMATIS</h1>
+                <p style="color: #10B981; font-weight: 600; font-size: 15px;">Plateforme Sécurisée d'Ingénierie & Logistique</p>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
-
         with st.form("login_form"):
+            st.markdown("##### Connexion Utilisateur")
+            username = st.text_input("Nom d'utilisateur")
+            password = st.text_input("Mot de passe", type="password")
 
-            st.markdown(
-                "##### Connexion Utilisateur"
-            )
-
-            username = st.text_input(
-                "Nom d'utilisateur"
-            )
-
-            password = st.text_input(
-                "Mot de passe",
-                type="password"
-            )
-
-            btn_class = (
-                "btn-login-success"
-                if st.session_state.logged_in
-                else "btn-login"
-            )
-
-            st.markdown(
-                f'<div class="{btn_class}">',
-                unsafe_allow_html=True
-            )
-
-            submit = st.form_submit_button(
-                "SE CONNECTER",
-                use_container_width=True
-            )
-
-            st.markdown(
-                "</div>",
-                unsafe_allow_html=True
-            )
+            btn_class = "btn-login-success" if st.session_state.logged_in else "btn-login"
+            st.markdown(f'<div class="{btn_class}">', unsafe_allow_html=True)
+            submit = st.form_submit_button("SE CONNECTER", use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
             if submit:
-
-                user = user_info(
-                    username
-                )
-
-                if (
-                    user
-                    and user["password"] == password
-                ):
-
-                    execute(
-                        """
-                        UPDATE users
-                        SET last_login=?
-                        WHERE username=?
-                        """,
-                        (
-                            datetime.now().strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            ),
-                            username
-                        )
-                    )
-
+                user = user_info(username)
+                if user and user["password"] == password:
+                    execute("UPDATE users SET last_login=? WHERE username=?", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), username))
                     st.session_state.logged_in = True
-
                     st.session_state.current_user = username
-
-                    st.success(
-                        "Accès validé !"
-                    )
-
+                    st.success("Accès validé !")
                     st.rerun()
-
                 else:
-
-                    st.error(
-                        "Identifiants incorrects."
-                    )
+                    st.error("Identifiants incorrects.")
 
 
 if not st.session_state.logged_in:
-
     login_screen()
-
     st.stop()
 
-
-CURRENT_USER = user_info(
-    st.session_state.current_user
-)
-
+CURRENT_USER = user_info(st.session_state.current_user)
 ROLE = CURRENT_USER["role"]
 
 
 # =========================================================
-# SÉLECTION CLIENT
+# SELECTION CLIENT & GESTION DU COMPTE USER / ADMIN
 # =========================================================
-
 if not st.session_state.selected_client:
-
-    # Logo NOMATIS en haut
-    logo_nomatis = normalized_logo(
-        NOMATIS_LOGO,
-        size=(300, 100)
-    )
-
-    if logo_nomatis:
-
-        c_logo1, c_logo2, c_logo3 = st.columns(
-            [1, 2, 1]
-        )
-
-        with c_logo2:
-
-            st.image(
-                logo_nomatis,
-                use_container_width=True
-            )
-
     st.markdown(
         """
         <div class="main-header">
-
-            <div class="main-title">
-                Gestion Stock MW NOMATIS
-            </div>
-
-            <div class="subtitle">
-                Sélectionnez l'espace client
-                pour accéder au stock dédié
-            </div>
-
+            <div class="main-title">Gestion Stock MW NOMATIS</div>
+            <div class="subtitle">Sélectionnez l'espace client pour accéder au stock dédié</div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     cols = st.columns(3)
-
-    for idx, (
-        client,
-        info
-    ) in enumerate(CLIENTS.items()):
-
+    for idx, (client, info) in enumerate(CLIENTS.items()):
         with cols[idx]:
-
-            st.markdown(
-                f"""
-                <div class="glass-card"
-                     style="
-                        border-top:4px solid
-                        {info['color']};
-                        text-align:center;
-                     ">
-                """,
-                unsafe_allow_html=True
-            )
-
-            logo = normalized_logo(
-                info["logo"],
-                size=(250, 100)
-            )
-
+            st.markdown(f'<div class="glass-card" style="border-top: 4px solid {info["color"]}; text-align: center;">', unsafe_allow_html=True)
+            logo = normalized_logo(info["logo"])
             if logo:
-
-                st.image(
-                    logo,
-                    use_container_width=True
-                )
-
+                st.image(logo, use_container_width=True)
             else:
+                st.markdown(f"<h2 style='color:{info['color']}'>{client}</h2>", unsafe_allow_html=True)
 
-                st.markdown(
-                    f"""
-                    <h2 style="
-                        color:{info['color']}
-                    ">
-                        {client}
-                    </h2>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-            if st.button(
-                f"ACCÈS AU STOCK {client.upper()}",
-                key=f"select_{client}",
-                use_container_width=True
-            ):
-
+            if st.button(f"ACCÈS AU STOCK {client.upper()}", key=f"select_{client}", use_container_width=True):
                 st.session_state.selected_client = client
-
                 st.rerun()
-
-            st.markdown(
-                "</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # =====================================================
-    # ADMIN USERS
-    # =====================================================
-
     if can(ROLE, "manage_users"):
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("⚙️ Administration des Utilisateurs (Rôle Admin)")
 
-        st.markdown(
-            '<div class="glass-card">',
-            unsafe_allow_html=True
-        )
-
-        st.subheader(
-            "⚙️ Administration des Utilisateurs"
-        )
-
-        tab_u1, tab_u2 = st.tabs(
-            [
-                "➕ Créer un Utilisateur",
-                "✏️ Gérer / Modifier Utilisateurs"
-            ]
-        )
+        tab_u1, tab_u2 = st.tabs(["➕ Créer un Utilisateur", "✏️ Gérer / Modifier Utilisateurs"])
 
         with tab_u1:
-
-            with st.form(
-                "create_user_form"
-            ):
-
-                new_u = st.text_input(
-                    "Identifiant (Username)"
-                )
-
-                new_p = st.text_input(
-                    "Mot de passe",
-                    type="password"
-                )
-
-                new_fn = st.text_input(
-                    "Nom Complet"
-                )
-
-                new_r = st.selectbox(
-                    "Rôle",
-                    [
-                        "admin",
-                        "magasinier",
-                        "coordinateur",
-                        "coordinatrice"
-                    ]
-                )
-
-                if st.form_submit_button(
-                    "Créer l'utilisateur"
-                ):
-
-                    if (
-                        new_u
-                        and new_p
-                        and new_fn
-                    ):
-
+            with st.form("create_user_form"):
+                new_u = st.text_input("Identifiant (Username)")
+                new_p = st.text_input("Mot de passe", type="password")
+                new_fn = st.text_input("Nom Complet")
+                new_r = st.selectbox("Rôle", ["admin", "magasinier", "coordinateur", "coordinatrice"])
+                if st.form_submit_button("Créer l'utilisateur"):
+                    if new_u and new_p and new_fn:
                         try:
-
-                            execute(
-                                """
-                                INSERT INTO users
-                                VALUES (?,?,?,?,?)
-                                """,
-                                (
-                                    new_u,
-                                    new_p,
-                                    new_fn,
-                                    new_r,
-                                    "Jamais"
-                                )
-                            )
-
-                            st.success(
-                                f"Utilisateur {new_u} créé !"
-                            )
-
+                            execute("INSERT INTO users VALUES (?,?,?,?,?)", (new_u, new_p, new_fn, new_r, "Jamais"))
+                            st.success(f"Utilisateur {new_u} créé !")
                             st.rerun()
-
                         except Exception:
-
-                            st.error(
-                                "Nom d'utilisateur déjà existant."
-                            )
-
+                            st.error("Nom d'utilisateur déjà existant.")
                     else:
-
-                        st.error(
-                            "Veuillez remplir tous les champs."
-                        )
+                        st.error("Veuillez remplir tous les champs.")
 
         with tab_u2:
+            all_users = query("SELECT username, fullname, role, last_login FROM users")
+            st.dataframe(pd.DataFrame([dict(u) for u in all_users]), use_container_width=True, hide_index=True)
 
-            all_users = query(
-                """
-                SELECT
-                    username,
-                    fullname,
-                    role,
-                    last_login
-                FROM users
-                """
-            )
-
-            st.dataframe(
-                pd.DataFrame(
-                    [dict(u) for u in all_users]
-                ),
-                use_container_width=True,
-                hide_index=True
-            )
-
-            u_to_edit = st.selectbox(
-                "Sélectionner un utilisateur à modifier",
-                [
-                    u["username"]
-                    for u in all_users
-                ]
-            )
-
+            u_to_edit = st.selectbox("Sélectionner un utilisateur à modifier", [u["username"] for u in all_users])
             if u_to_edit:
-
-                u_data = user_info(
-                    u_to_edit
-                )
-
-                with st.form(
-                    "edit_user_form"
-                ):
-
-                    e_fn = st.text_input(
-                        "Nom complet",
-                        value=u_data["fullname"]
-                    )
-
-                    e_p = st.text_input(
-                        "Nouveau mot de passe",
-                        value=u_data["password"]
-                    )
-
-                    e_r = st.selectbox(
-                        "Rôle",
-                        [
-                            "admin",
-                            "magasinier",
-                            "coordinateur",
-                            "coordinatrice"
-                        ],
-                        index=[
-                            "admin",
-                            "magasinier",
-                            "coordinateur",
-                            "coordinatrice"
-                        ].index(
-                            u_data["role"]
-                        )
-                    )
-
-                    if st.form_submit_button(
-                        "Mettre à jour l'utilisateur"
-                    ):
-
-                        execute(
-                            """
-                            UPDATE users
-                            SET fullname=?,
-                                password=?,
-                                role=?
-                            WHERE username=?
-                            """,
-                            (
-                                e_fn,
-                                e_p,
-                                e_r,
-                                u_to_edit
-                            )
-                        )
-
-                        st.success(
-                            "Informations mises à jour !"
-                        )
-
+                u_data = user_info(u_to_edit)
+                with st.form("edit_user_form"):
+                    e_fn = st.text_input("Nom complet", value=u_data["fullname"])
+                    e_p = st.text_input("Nouveau mot de passe", value=u_data["password"])
+                    e_r = st.selectbox("Rôle", ["admin", "magasinier", "coordinateur", "coordinatrice"], index=["admin", "magasinier", "coordinateur", "coordinatrice"].index(u_data["role"]))
+                    if st.form_submit_button("Mettre à jour l'utilisateur"):
+                        execute("UPDATE users SET fullname=?, password=?, role=? WHERE username=?", (e_fn, e_p, e_r, u_to_edit))
+                        st.success("Informations mises à jour !")
                         st.rerun()
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     else:
-
-        st.markdown(
-            '<div class="glass-card">',
-            unsafe_allow_html=True
-        )
-
-        st.subheader(
-            "👤 Mon Compte"
-        )
-
-        with st.form(
-            "my_account_form"
-        ):
-
-            my_fn = st.text_input(
-                "Nom Complet",
-                value=CURRENT_USER["fullname"]
-            )
-
-            my_p = st.text_input(
-                "Changer le mot de passe",
-                value=CURRENT_USER["password"],
-                type="password"
-            )
-
-            if st.form_submit_button(
-                "Mettre à jour mes informations"
-            ):
-
-                execute(
-                    """
-                    UPDATE users
-                    SET fullname=?,
-                        password=?
-                    WHERE username=?
-                    """,
-                    (
-                        my_fn,
-                        my_p,
-                        CURRENT_USER["username"]
-                    )
-                )
-
-                st.success(
-                    "Compte mis à jour avec succès !"
-                )
-
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("👤 Mon Compte")
+        with st.form("my_account_form"):
+            my_fn = st.text_input("Nom Complet", value=CURRENT_USER["fullname"])
+            my_p = st.text_input("Changer le mot de passe", value=CURRENT_USER["password"], type="password")
+            if st.form_submit_button("Mettre à jour mes informations"):
+                execute("UPDATE users SET fullname=?, password=? WHERE username=?", (my_fn, my_p, CURRENT_USER["username"]))
+                st.success("Compte mis à jour avec succès !")
                 st.rerun()
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.stop()
-
 
 CLIENT = st.session_state.selected_client
 
 
 # =========================================================
-# APPLICATION PRINCIPALE
+# APPLI PRINCIPALE : 5 RUBRIQUES
 # =========================================================
-
-h1, h2 = st.columns(
-    [3, 1]
-)
-
+h1, h2 = st.columns([3, 1])
 with h1:
-
     st.markdown(
         f"""
         <div class="main-header">
-
-            <div class="main-title">
-                Gestion Stock MW NOMATIS
-                — Espace {CLIENT}
-            </div>
-
-            <div class="subtitle">
-                Utilisateur :
-                {CURRENT_USER['fullname']}
-                ({ROLE.upper()})
-            </div>
-
+            <div class="main-title">Gestion Stock MW NOMATIS — Espace {CLIENT}</div>
+            <div class="subtitle">Utilisateur : {CURRENT_USER['fullname']} ({ROLE.upper()})</div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
-
 with h2:
-
-    # Logo client
-    client_logo = normalized_logo(
-        CLIENTS[CLIENT]["logo"],
-        size=(220, 80)
-    )
-
-    if client_logo:
-
-        st.image(
-            client_logo,
-            use_container_width=True
-        )
-
-    if st.button(
-        "🔄 Changer Client",
-        use_container_width=True
-    ):
-
+    if st.button("🔄 Changer Client", use_container_width=True):
         st.session_state.selected_client = None
-
         st.rerun()
-
-    if st.button(
-        "🚪 Déconnexion",
-        use_container_width=True
-    ):
-
+    if st.button("🚪 Déconnexion", use_container_width=True):
         st.session_state.logged_in = False
-
         st.session_state.selected_client = None
-
         st.rerun()
 
+tabs = st.tabs(["📥 BE", "📤 BS", "📊 Situation Stock", "📜 Historique", "⚙️ Configuration"])
 
-tabs = st.tabs(
-    [
-        "📥 BE",
-        "📤 BS",
-        "📊 Situation Stock",
-        "📜 Historique",
-        "⚙️ Configuration"
-    ]
-)
-
-
-# =========================================================
-# BE
-# =========================================================
-
+# ---------------------------------------------------------
+# 📥 RUBRIQUE 1: BON D'ENTRÉE (BE)
+# ---------------------------------------------------------
 with tabs[0]:
-
     if can(ROLE, "be"):
-
-        st.markdown(
-            '<div class="glass-card">',
-            unsafe_allow_html=True
-        )
-
-        st.subheader(
-            "Création Bon d'Entrée (BE)"
-        )
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("Création Bon d'Entrée (BE)")
 
         c1, c2, c3 = st.columns(3)
-
         now_dt = datetime.now()
+        c1.text_input("Date/Heure Saisie (Auto)", value=now_dt.strftime("%Y-%m-%d %H:%M:%S"), disabled=True)
+        date_be = c2.date_input("Date Bon (<= Aujourd'hui)", value=date.today(), max_value=date.today())
 
-        c1.text_input(
-            "Date/Heure Saisie (Auto)",
-            value=now_dt.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-            disabled=True
-        )
-
-        date_be = c2.date_input(
-            "Date Bon (<= Aujourd'hui)",
-            value=date.today(),
-            max_value=date.today()
-        )
-
-        prefix_be = (
-            f"BE MW-{now_dt.strftime('%Y%m%d')}-"
-        )
-
+        # Generation dynamique du N° BE
+        prefix_be = f"BE MW-{now_dt.strftime('%Y%m%d')}-"
         last_be = query(
-            """
-            SELECT number
-            FROM bons
-            WHERE type='BE'
-              AND client=?
-              AND number LIKE ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (
-                CLIENT,
-                f"{prefix_be}%"
-            ),
+            "SELECT number FROM bons WHERE type='BE' AND client=? AND number LIKE ? ORDER BY id DESC LIMIT 1",
+            (CLIENT, f"{prefix_be}%"),
             one=True
         )
 
         if last_be:
-
             try:
-
-                last_seq = int(
-                    last_be["number"].split("-")[-1]
-                )
-
-                auto_num_be = (
-                    f"{prefix_be}"
-                    f"{last_seq + 1:02d}"
-                )
-
+                last_seq = int(last_be["number"].split("-")[-1])
+                auto_num_be = f"{prefix_be}{last_seq + 1:02d}"
             except ValueError:
-
-                auto_num_be = (
-                    f"{prefix_be}01"
-                )
-
+                auto_num_be = f"{prefix_be}01"
         else:
+            auto_num_be = f"{prefix_be}01"
 
-            auto_num_be = (
-                f"{prefix_be}01"
-            )
-
-        num_be = c3.text_input(
-            "N° BE",
-            value=auto_num_be
-        )
+        num_be = c3.text_input("N° BE", value=auto_num_be)
 
         c4, c5 = st.columns(2)
+        existing_fourns = active_names("fournisseurs")
+        fourn_sel = c4.selectbox("Fournisseur existant", ["-- Autre --"] + existing_fourns)
+        fourn_custom = c4.text_input("Saisir autre fournisseur (si non listé)")
+        fournisseur = fourn_custom if fourn_sel == "-- Autre --" else fourn_sel
 
-        existing_fourns = active_names(
-            "fournisseurs"
-        )
-
-        fourn_sel = c4.selectbox(
-            "Fournisseur existant",
-            ["-- Autre --"] + existing_fourns
-        )
-
-        fourn_custom = c4.text_input(
-            "Saisir autre fournisseur"
-        )
-
-        fournisseur = (
-            fourn_custom
-            if fourn_sel == "-- Autre --"
-            else fourn_sel
-        )
-
-        lieu = c5.text_input(
-            "Lieu de Livraison",
-            value="Magasin Principal"
-        )
-
-        st.text_input(
-            "Réceptionné par (Auto)",
-            value=CURRENT_USER["fullname"],
-            disabled=True
-        )
+        lieu = c5.text_input("Lieu de Livraison", value="Magasin Principal")
+        st.text_input("Réceptionné par (Auto)", value=CURRENT_USER["fullname"], disabled=True)
 
         st.markdown("---")
+        st.markdown("##### Ajouter des articles au Bon")
+        r1, r2, r3, r4 = st.columns([2, 3, 1.5, 3])
+        ref = r1.text_input("Référence", key="be_ref")
+        art = r2.selectbox("Article (Prédéfini)", active_names("articles"), key="be_art")
+        qty = r3.number_input("Quantité (> 0)", min_value=1, value=1, key="be_qty")
+        rem = r4.text_input("Remarque", key="be_rem")
 
-        st.markdown(
-            "##### Ajouter des articles au Bon"
-        )
-
-        r1, r2, r3, r4 = st.columns(
-            [2, 3, 1.5, 3]
-        )
-
-        ref = r1.text_input(
-            "Référence",
-            key="be_ref"
-        )
-
-        art = r2.selectbox(
-            "Article (Prédéfini)",
-            active_names("articles"),
-            key="be_art"
-        )
-
-        qty = r3.number_input(
-            "Quantité (> 0)",
-            min_value=1,
-            value=1,
-            key="be_qty"
-        )
-
-        rem = r4.text_input(
-            "Remarque",
-            key="be_rem"
-        )
-
-        if st.button(
-            "➕ Ajouter au tableau",
-            key="add_be_line"
-        ):
-
+        if st.button("➕ Ajouter au tableau", key="add_be_line"):
             if not fournisseur:
-
-                st.error(
-                    "Le champ Fournisseur est obligatoire."
-                )
-
+                st.error("Le champ Fournisseur est obligatoire.")
             else:
-
                 found = False
-
                 for item in st.session_state.temp_be_items:
-
-                    if (
-                        item["art"] == art
-                        and item["ref"] == ref
-                    ):
-
+                    if item["art"] == art and item["ref"] == ref:
                         item["qty"] += qty
-
-                        item["rem"] = (
-                            item["rem"]
-                            + " | "
-                            + rem
-                        ).strip(" | ")
-
+                        item["rem"] = (item["rem"] + " | " + rem).strip(" | ")
                         found = True
-
                         break
-
                 if not found:
-
-                    st.session_state.temp_be_items.append(
-                        {
-                            "ref": ref,
-                            "art": art,
-                            "qty": qty,
-                            "rem": rem
-                        }
-                    )
+                    st.session_state.temp_be_items.append({"ref": ref, "art": art, "qty": qty, "rem": rem})
 
         if st.session_state.temp_be_items:
-
-            st.markdown(
-                "###### Articles saisis :"
-            )
-
-            st.dataframe(
-                pd.DataFrame(
-                    st.session_state.temp_be_items
-                ),
-                use_container_width=True
-            )
+            st.markdown("###### Articles saisis :")
+            st.dataframe(pd.DataFrame(st.session_state.temp_be_items), use_container_width=True)
 
             def save_be():
-
                 try:
-
                     bon_id = execute(
-                        """
-                        INSERT INTO bons (
-                            type,
-                            number,
-                            client,
-                            date_bon,
-                            datetime_saisie,
-                            fournisseur,
-                            lieu_livraison,
-                            receptionne_par,
-                            created_by
-                        )
-                        VALUES (?,?,?,?,?,?,?,?,?)
-                        """,
+                        "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,fournisseur,lieu_livraison,receptionne_par,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
                         (
                             "BE",
                             num_be,
                             CLIENT,
                             str(date_be),
-                            now_dt.strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            ),
+                            now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                             fournisseur,
                             lieu,
                             CURRENT_USER["fullname"],
-                            CURRENT_USER["username"]
-                        )
-                    )
-
-                    for item in st.session_state.temp_be_items:
-
-                        art_id = article_id_by_name(
-                            item["art"]
-                        )
-
-                        execute(
-                            """
-                            INSERT INTO bon_items (
-                                bon_id,
-                                article_id,
-                                reference,
-                                quantity,
-                                remarque
-                            )
-                            VALUES (?,?,?,?,?)
-                            """,
-                            (
-                                bon_id,
-                                art_id,
-                                item["ref"],
-                                item["qty"],
-                                item["rem"]
-                            )
-                        )
-
-                        set_stock(
-                            CLIENT,
-                            art_id,
-                            current_stock(
-                                CLIENT,
-                                art_id
-                            ) + item["qty"]
-                        )
-
-                        add_movement(
-                            CLIENT,
-                            art_id,
-                            "BE",
-                            item["qty"],
-                            num_be,
                             CURRENT_USER["username"],
-                            item["rem"],
-                            fournisseur=fournisseur
-                        )
-
+                        ),
+                    )
+                    for item in st.session_state.temp_be_items:
+                        art_id = article_id_by_name(item["art"])
+                        execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
+                        set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) + item["qty"])
+                        add_movement(CLIENT, art_id, "BE", item["qty"], num_be, CURRENT_USER["username"], item["rem"], fournisseur=fournisseur)
                     st.session_state.temp_be_items = []
-
-                    st.success(
-                        f"Bon d'Entrée {num_be} "
-                        "enregistré avec succès !"
-                    )
-
+                    st.success(f"Bon d'Entrée {num_be} enregistré avec succès !")
                 except sqlite3.IntegrityError:
-
-                    st.error(
-                        f"Erreur : Le numéro de bon "
-                        f"'{num_be}' existe déjà."
-                    )
+                    st.error(f"Erreur : Le numéro de bon '{num_be}' existe déjà. Veuillez modifier le numéro de bon.")
 
             b1, b2 = st.columns(2)
-
-            if b1.button(
-                "💾 Enregistrer le Bon",
-                use_container_width=True
-            ):
-
-                confirm_action_dialog(
-                    "Voulez-vous vraiment enregistrer "
-                    "ce Bon d'Entrée ?",
-                    save_be
-                )
-
-            if b2.button(
-                "🗑️ Vider le tableau",
-                use_container_width=True
-            ):
-
+            if b1.button("💾 Enregistrer le Bon", use_container_width=True):
+                confirm_action_dialog("Voulez-vous vraiment enregistrer ce Bon d'Entrée ?", save_be)
+            if b2.button("🗑️ Vider le tableau", use_container_width=True):
                 st.session_state.temp_be_items = []
-
                 st.rerun()
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
-
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
+        st.info("Accès restreint : Consultez la Situation Stock ou l'Historique.")
 
-        st.info(
-            "Accès restreint : Consultez la "
-            "Situation Stock ou l'Historique."
-        )
-
-
-# =========================================================
-# BS
-# =========================================================
-
+# ---------------------------------------------------------
+# 📤 RUBRIQUE 2: BON DE SORTIE (BS)
+# ---------------------------------------------------------
 with tabs[1]:
-
     if can(ROLE, "bs"):
-
-        st.markdown(
-            '<div class="glass-card">',
-            unsafe_allow_html=True
-        )
-
-        st.subheader(
-            "Création Bon de Sortie (BS)"
-        )
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("Création Bon de Sortie (BS)")
 
         c1, c2, c3 = st.columns(3)
-
         now_dt = datetime.now()
+        c1.text_input("Date/Heure Saisie (Auto)", value=now_dt.strftime("%Y-%m-%d %H:%M:%S"), disabled=True, key="bs_dt")
+        date_bs = c2.date_input("Date Bon (<= Aujourd'hui)", value=date.today(), max_value=date.today(), key="bs_d")
 
-        c1.text_input(
-            "Date/Heure Saisie (Auto)",
-            value=now_dt.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-            disabled=True,
-            key="bs_dt"
-        )
-
-        date_bs = c2.date_input(
-            "Date Bon (<= Aujourd'hui)",
-            value=date.today(),
-            max_value=date.today(),
-            key="bs_d"
-        )
-
-        prefix_bs = (
-            f"BS MW-{now_dt.strftime('%Y%m%d')}-"
-        )
-
+        # Generation dynamique du N° BS
+        prefix_bs = f"BS MW-{now_dt.strftime('%Y%m%d')}-"
         last_bs = query(
-            """
-            SELECT number
-            FROM bons
-            WHERE type='BS'
-              AND client=?
-              AND number LIKE ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (
-                CLIENT,
-                f"{prefix_bs}%"
-            ),
+            "SELECT number FROM bons WHERE type='BS' AND client=? AND number LIKE ? ORDER BY id DESC LIMIT 1",
+            (CLIENT, f"{prefix_bs}%"),
             one=True
         )
 
         if last_bs:
-
             try:
-
-                last_seq = int(
-                    last_bs["number"].split("-")[-1]
-                )
-
-                auto_num_bs = (
-                    f"{prefix_bs}"
-                    f"{last_seq + 1:02d}"
-                )
-
+                last_seq = int(last_bs["number"].split("-")[-1])
+                auto_num_bs = f"{prefix_bs}{last_seq + 1:02d}"
             except ValueError:
-
-                auto_num_bs = (
-                    f"{prefix_bs}01"
-                )
-
+                auto_num_bs = f"{prefix_bs}01"
         else:
+            auto_num_bs = f"{prefix_bs}01"
 
-            auto_num_bs = (
-                f"{prefix_bs}01"
-            )
-
-        num_bs = c3.text_input(
-            "N° BS",
-            value=auto_num_bs
-        )
+        num_bs = c3.text_input("N° BS", value=auto_num_bs)
 
         c4, c5 = st.columns(2)
-
-        equipe = c4.selectbox(
-            "Équipe Récupératrice",
-            active_names("equipes")
-        )
-
-        destination = c5.text_input(
-            "Destination / Site",
-            value="Site Telecom"
-        )
+        equipe = c4.selectbox("Équipe Récupératrice", active_names("equipes"))
+        destination = c5.text_input("Destination / Site", value="Site Telecom")
 
         st.markdown("---")
+        st.markdown("##### Sélection des articles à sortir")
+        r1, r2, r3, r4 = st.columns([2, 3, 1.5, 3])
+        ref = r1.text_input("Référence", key="bs_ref")
+        art = r2.selectbox("Article", active_names("articles"), key="bs_art")
+        qty = r3.number_input("Quantité", min_value=1, value=1, key="bs_qty")
+        rem = r4.text_input("Remarque", key="bs_rem")
 
-        st.markdown(
-            "##### Sélection des articles à sortir"
-        )
+        if st.button("➕ Ajouter au BS", key="add_bs_line"):
+            art_id = article_id_by_name(art)
+            stk_dispo = current_stock(CLIENT, art_id)
 
-        r1, r2, r3, r4 = st.columns(
-            [2, 3, 1.5, 3]
-        )
-
-        ref = r1.text_input(
-            "Référence",
-            key="bs_ref"
-        )
-
-        art = r2.selectbox(
-            "Article",
-            active_names("articles"),
-            key="bs_art"
-        )
-
-        qty = r3.number_input(
-            "Quantité",
-            min_value=1,
-            value=1,
-            key="bs_qty"
-        )
-
-        rem = r4.text_input(
-            "Remarque",
-            key="bs_rem"
-        )
-
-        if st.button(
-            "➕ Ajouter au BS",
-            key="add_bs_line"
-        ):
-
-            art_id = article_id_by_name(
-                art
-            )
-
-            stk_dispo = current_stock(
-                CLIENT,
-                art_id
-            )
-
-            in_cart = sum(
-                item["qty"]
-                for item in st.session_state.temp_bs_items
-                if item["art"] == art
-            )
-
+            in_cart = sum(item["qty"] for item in st.session_state.temp_bs_items if item["art"] == art)
             if (qty + in_cart) > stk_dispo:
-
-                st.error(
-                    f"Quantité insuffisante ! "
-                    f"Stock dispo : {stk_dispo} "
-                    f"(En panier: {in_cart})"
-                )
-
+                st.error(f"Quantité insuffisante ! Stock dispo : {stk_dispo} (En panier: {in_cart})")
             else:
-
                 found = False
-
                 for item in st.session_state.temp_bs_items:
-
-                    if (
-                        item["art"] == art
-                        and item["ref"] == ref
-                    ):
-
+                    if item["art"] == art and item["ref"] == ref:
                         item["qty"] += qty
-
-                        item["rem"] = (
-                            item["rem"]
-                            + " | "
-                            + rem
-                        ).strip(" | ")
-
+                        item["rem"] = (item["rem"] + " | " + rem).strip(" | ")
                         found = True
-
                         break
-
                 if not found:
-
-                    st.session_state.temp_bs_items.append(
-                        {
-                            "ref": ref,
-                            "art": art,
-                            "qty": qty,
-                            "rem": rem
-                        }
-                    )
+                    st.session_state.temp_bs_items.append({"ref": ref, "art": art, "qty": qty, "rem": rem})
 
         if st.session_state.temp_bs_items:
-
-            st.markdown(
-                "###### Articles dans le panier de sortie :"
-            )
-
-            st.dataframe(
-                pd.DataFrame(
-                    st.session_state.temp_bs_items
-                ),
-                use_container_width=True
-            )
+            st.markdown("###### Articles dans le panier de sortie :")
+            st.dataframe(pd.DataFrame(st.session_state.temp_bs_items), use_container_width=True)
 
             def save_bs():
-
                 try:
-
                     bon_id = execute(
-                        """
-                        INSERT INTO bons (
-                            type,
-                            number,
-                            client,
-                            date_bon,
-                            datetime_saisie,
-                            equipe,
-                            destination,
-                            created_by
-                        )
-                        VALUES (?,?,?,?,?,?,?,?)
-                        """,
+                        "INSERT INTO bons (type,number,client,date_bon,datetime_saisie,equipe,destination,created_by) VALUES (?,?,?,?,?,?,?,?)",
                         (
                             "BS",
                             num_bs,
                             CLIENT,
                             str(date_bs),
-                            now_dt.strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            ),
+                            now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                             equipe,
                             destination,
-                            CURRENT_USER["username"]
-                        )
-                    )
-
-                    for item in st.session_state.temp_bs_items:
-
-                        art_id = article_id_by_name(
-                            item["art"]
-                        )
-
-                        execute(
-                            """
-                            INSERT INTO bon_items (
-                                bon_id,
-                                article_id,
-                                reference,
-                                quantity,
-                                remarque
-                            )
-                            VALUES (?,?,?,?,?)
-                            """,
-                            (
-                                bon_id,
-                                art_id,
-                                item["ref"],
-                                item["qty"],
-                                item["rem"]
-                            )
-                        )
-
-                        set_stock(
-                            CLIENT,
-                            art_id,
-                            current_stock(
-                                CLIENT,
-                                art_id
-                            ) - item["qty"]
-                        )
-
-                        add_movement(
-                            CLIENT,
-                            art_id,
-                            "BS",
-                            item["qty"],
-                            num_bs,
                             CURRENT_USER["username"],
-                            item["rem"],
-                            equipe=equipe
-                        )
-
+                        ),
+                    )
+                    for item in st.session_state.temp_bs_items:
+                        art_id = article_id_by_name(item["art"])
+                        execute("INSERT INTO bon_items (bon_id,article_id,reference,quantity,remarque) VALUES (?,?,?,?,?)", (bon_id, art_id, item["ref"], item["qty"], item["rem"]))
+                        set_stock(CLIENT, art_id, current_stock(CLIENT, art_id) - item["qty"])
+                        add_movement(CLIENT, art_id, "BS", item["qty"], num_bs, CURRENT_USER["username"], item["rem"], equipe=equipe)
                     st.session_state.temp_bs_items = []
-
-                    st.success(
-                        f"Bon de Sortie {num_bs} "
-                        "enregistré avec succès !"
-                    )
-
+                    st.success(f"Bon de Sortie {num_bs} enregistré avec succès !")
                 except sqlite3.IntegrityError:
-
-                    st.error(
-                        f"Erreur : Le numéro de bon "
-                        f"'{num_bs}' existe déjà."
-                    )
+                    st.error(f"Erreur : Le numéro de bon '{num_bs}' existe déjà. Veuillez modifier le numéro de bon.")
 
             b1, b2 = st.columns(2)
-
-            if b1.button(
-                "💾 Enregistrer le BS",
-                use_container_width=True
-            ):
-
-                confirm_action_dialog(
-                    "Voulez-vous vraiment enregistrer "
-                    "ce Bon de Sortie ?",
-                    save_bs
-                )
-
-            if b2.button(
-                "🗑️ Vider la liste",
-                use_container_width=True
-            ):
-
+            if b1.button("💾 Enregistrer le BS", use_container_width=True):
+                confirm_action_dialog("Voulez-vous vraiment enregistrer ce Bon de Sortie ?", save_bs)
+            if b2.button("🗑️ Vider la liste", use_container_width=True):
                 st.session_state.temp_bs_items = []
-
                 st.rerun()
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
-
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
+        st.info("Accès restreint.")
 
-        st.info(
-            "Accès restreint."
-        )
-
-
-# =========================================================
-# SITUATION STOCK
-# =========================================================
-
+# ---------------------------------------------------------
+# 📊 RUBRIQUE 3: SITUATION STOCK
+# ---------------------------------------------------------
 with tabs[2]:
-
-    st.markdown(
-        '<div class="glass-card">',
-        unsafe_allow_html=True
-    )
-
-    st.subheader(
-        f"Situation du Stock en Temps Réel — {CLIENT}"
-    )
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.subheader(f"Situation du Stock en Temps Réel — {CLIENT}")
 
     rows = query(
         """
-        SELECT
-
+        SELECT 
             a.name AS Article,
-
-            COALESCE(
-                (
-                    SELECT SUM(m.quantity)
-                    FROM movements m
-                    WHERE m.article_id = a.id
-                    AND m.client = ?
-                    AND m.movement_type
-                        IN ('BE','AJUST_POS')
-                ),
-                0
-            ) AS Total_Entrees,
-
-            COALESCE(
-                (
-                    SELECT SUM(m.quantity)
-                    FROM movements m
-                    WHERE m.article_id = a.id
-                    AND m.client = ?
-                    AND m.movement_type
-                        IN ('BS','AJUST_NEG')
-                ),
-                0
-            ) AS Total_Sorties,
-
-            COALESCE(
-                s.quantity,
-                0
-            ) AS Stock_Actuel
-
+            COALESCE((SELECT SUM(m.quantity) FROM movements m WHERE m.article_id = a.id AND m.client = ? AND m.movement_type IN ('BE','AJUST_POS')), 0) AS Total_Entrees,
+            COALESCE((SELECT SUM(m.quantity) FROM movements m WHERE m.article_id = a.id AND m.client = ? AND m.movement_type IN ('BS','AJUST_NEG')), 0) AS Total_Sorties,
+            COALESCE(s.quantity, 0) AS Stock_Actuel
         FROM articles a
-
-        LEFT JOIN stock s
-            ON s.article_id = a.id
-            AND s.client = ?
-
-        WHERE a.active = 1
-
-        ORDER BY a.name
+        LEFT JOIN stock s ON s.article_id = a.id AND s.client = ?
+        WHERE a.active = 1 ORDER BY a.name
         """,
-        (
-            CLIENT,
-            CLIENT,
-            CLIENT
-        )
+        (CLIENT, CLIENT, CLIENT),
     )
-
-    df_stock = pd.DataFrame(
-        [dict(r) for r in rows]
-    )
+    df_stock = pd.DataFrame([dict(r) for r in rows])
 
     if not df_stock.empty:
-
         c1, c2 = st.columns(2)
-
-        c1.metric(
-            "Nombre d'Articles Référencés",
-            len(df_stock)
-        )
-
-        c2.metric(
-            "Total Unités en Stock",
-            int(
-                df_stock["Stock_Actuel"].sum()
-            )
-        )
-
-        st.dataframe(
-            df_stock,
-            use_container_width=True,
-            hide_index=True
-        )
+        c1.metric("Nombre d'Articles Référencés", len(df_stock))
+        c2.metric("Total Unités en Stock", int(df_stock["Stock_Actuel"].sum()))
+        st.dataframe(df_stock, use_container_width=True, hide_index=True)
 
         st.download_button(
             "🖨️ Exporter / Imprimer Situation Stock (CSV)",
-            df_stock.to_csv(
-                index=False
-            ).encode("utf-8"),
-            file_name=(
-                f"Situation_Stock_"
-                f"{CLIENT}_"
-                f"{date.today()}.csv"
-            ),
-            mime="text/csv"
+            df_stock.to_csv(index=False).encode("utf-8"),
+            file_name=f"Situation_Stock_{CLIENT}_{date.today()}.csv",
+            mime="text/csv",
         )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown(
-        "</div>",
-        unsafe_allow_html=True
-    )
-
-
-# =========================================================
-# HISTORIQUE
-# =========================================================
-
+# ---------------------------------------------------------
+# 📜 RUBRIQUE 4: HISTORIQUE & MODIFICATION
+# ---------------------------------------------------------
 with tabs[3]:
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.subheader("Historique des Bons & Impression")
 
-    st.markdown(
-        '<div class="glass-card">',
-        unsafe_allow_html=True
-    )
+    type_filter = st.radio("Type de Bon :", ["Bons d'Entrée (BE)", "Bons de Sortie (BS)"], horizontal=True)
+    b_type = "BE" if "Entrée" in type_filter else "BS"
 
-    st.subheader(
-        "Historique des Bons & Impression"
-    )
-
-    type_filter = st.radio(
-        "Type de Bon :",
-        [
-            "Bons d'Entrée (BE)",
-            "Bons de Sortie (BS)"
-        ],
-        horizontal=True
-    )
-
-    b_type = (
-        "BE"
-        if "Entrée" in type_filter
-        else "BS"
-    )
-
-    bons = query(
-        """
-        SELECT *
-        FROM bons
-        WHERE client=?
-          AND type=?
-        ORDER BY id DESC
-        """,
-        (
-            CLIENT,
-            b_type
-        )
-    )
+    bons = query("SELECT * FROM bons WHERE client=? AND type=? ORDER BY id DESC", (CLIENT, b_type))
 
     if bons:
-
-        opts = [
-            f"{b['number']} | "
-            f"Date: {b['date_bon']} | "
-            f"ID:{b['id']}"
-            for b in bons
-        ]
-
-        sel = st.selectbox(
-            "Sélectionner un Bon",
-            opts
-        )
-
-        selected_id = int(
-            sel.split("ID:")[1]
-        )
-
-        b_data = query(
-            """
-            SELECT *
-            FROM bons
-            WHERE id=?
-            """,
-            (selected_id,),
-            one=True
-        )
+        opts = [f"{b['number']} | Date: {b['date_bon']} | ID:{b['id']}" for b in bons]
+        sel = st.selectbox("Sélectionner un Bon", opts)
+        selected_id = int(sel.split("ID:")[1])
+        b_data = query("SELECT * FROM bons WHERE id=?", (selected_id,), one=True)
 
         c1, c2 = st.columns(2)
-
         with c1:
-
-            pdf_b = generate_pdf(
-                selected_id
-            )
-
-            st.download_button(
-                "📄 Imprimer / Télécharger en PDF",
-                pdf_b,
-                file_name=(
-                    f"{b_data['number']}.pdf"
-                ),
-                mime="application/pdf",
-                use_container_width=True
-            )
-
+            pdf_b = generate_pdf(selected_id)
+            st.download_button("📄 Imprimer / Télécharger en PDF", pdf_b, file_name=f"{b_data['number']}.pdf", mime="application/pdf", use_container_width=True)
         with c2:
-
-            docx_b = generate_docx(
-                selected_id
-            )
-
-            st.download_button(
-                "📝 Imprimer / Télécharger en Word (.docx)",
-                docx_b,
-                file_name=(
-                    f"{b_data['number']}.docx"
-                ),
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "wordprocessingml.document"
-                ),
-                use_container_width=True
-            )
+            docx_b = generate_docx(selected_id)
+            st.download_button("📝 Imprimer / Télécharger en Word (.docx)", docx_b, file_name=f"{b_data['number']}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
         if can(ROLE, "edit"):
-
             st.markdown("---")
+            st.markdown("##### Options de Modification / Suppression")
 
-            st.markdown(
-                "##### Options de Modification / Suppression"
-            )
-
-            with st.expander(
-                "✏️ Modifier les informations du Bon"
-            ):
-
-                with st.form(
-                    "edit_bon_meta"
-                ):
-
-                    n_date = st.date_input(
-                        "Date Bon",
-                        value=datetime.strptime(
-                            b_data["date_bon"],
-                            "%Y-%m-%d"
-                        ).date(),
-                        max_value=date.today()
-                    )
-
+            with st.expander("✏️ Modifier les informations du Bon"):
+                with st.form("edit_bon_meta"):
+                    n_date = st.date_input("Date Bon", value=datetime.strptime(b_data["date_bon"], "%Y-%m-%d").date(), max_value=date.today())
                     if b_type == "BE":
-
-                        n_fourn = st.text_input(
-                            "Fournisseur",
-                            value=(
-                                b_data["fournisseur"]
-                                or ""
-                            )
-                        )
-
-                        n_lieu = st.text_input(
-                            "Lieu Livraison",
-                            value=(
-                                b_data["lieu_livraison"]
-                                or ""
-                            )
-                        )
-
-                        if st.form_submit_button(
-                            "Valider modifications"
-                        ):
-
-                            execute(
-                                """
-                                UPDATE bons
-                                SET date_bon=?,
-                                    fournisseur=?,
-                                    lieu_livraison=?
-                                WHERE id=?
-                                """,
-                                (
-                                    str(n_date),
-                                    n_fourn,
-                                    n_lieu,
-                                    selected_id
-                                )
-                            )
-
-                            st.success(
-                                "Modifié avec succès !"
-                            )
-
+                        n_fourn = st.text_input("Fournisseur", value=b_data["fournisseur"] or "")
+                        n_lieu = st.text_input("Lieu Livraison", value=b_data["lieu_livraison"] or "")
+                        if st.form_submit_button("Valider modifications"):
+                            execute("UPDATE bons SET date_bon=?, fournisseur=?, lieu_livraison=? WHERE id=?", (str(n_date), n_fourn, n_lieu, selected_id))
+                            st.success("Modifié avec succès !")
                             st.rerun()
-
                     else:
-
-                        n_eq = st.selectbox(
-                            "Équipe",
-                            active_names("equipes")
-                        )
-
-                        n_dest = st.text_input(
-                            "Destination",
-                            value=(
-                                b_data["destination"]
-                                or ""
-                            )
-                        )
-
-                        if st.form_submit_button(
-                            "Valider modifications"
-                        ):
-
-                            execute(
-                                """
-                                UPDATE bons
-                                SET date_bon=?,
-                                    equipe=?,
-                                    destination=?
-                                WHERE id=?
-                                """,
-                                (
-                                    str(n_date),
-                                    n_eq,
-                                    n_dest,
-                                    selected_id
-                                )
-                            )
-
-                            st.success(
-                                "Modifié avec succès !"
-                            )
-
+                        n_eq = st.selectbox("Équipe", active_names("equipes"))
+                        n_dest = st.text_input("Destination", value=b_data["destination"] or "")
+                        if st.form_submit_button("Valider modifications"):
+                            execute("UPDATE bons SET date_bon=?, equipe=?, destination=? WHERE id=?", (str(n_date), n_eq, n_dest, selected_id))
+                            st.success("Modifié avec succès !")
                             st.rerun()
 
             def delete_current_bon():
-
-                items_to_revert = query(
-                    """
-                    SELECT *
-                    FROM bon_items
-                    WHERE bon_id=?
-                    """,
-                    (selected_id,)
-                )
-
+                items_to_revert = query("SELECT * FROM bon_items WHERE bon_id=?", (selected_id,))
                 for it in items_to_revert:
+                    stk = current_stock(CLIENT, it["article_id"])
+                    new_qty = stk - it["quantity"] if b_type == "BE" else stk + it["quantity"]
+                    set_stock(CLIENT, it["article_id"], new_qty)
+                execute("DELETE FROM bons WHERE id=?", (selected_id,))
+                st.success("Bon supprimé et stock réajusté !")
 
-                    stk = current_stock(
-                        CLIENT,
-                        it["article_id"]
-                    )
-
-                    if b_type == "BE":
-
-                        new_qty = (
-                            stk
-                            - it["quantity"]
-                        )
-
-                    else:
-
-                        new_qty = (
-                            stk
-                            + it["quantity"]
-                        )
-
-                    set_stock(
-                        CLIENT,
-                        it["article_id"],
-                        new_qty
-                    )
-
-                # Supprimer mouvements liés au bon
-                execute(
-                    """
-                    DELETE FROM movements
-                    WHERE client=?
-                      AND reference_bon=?
-                    """,
-                    (
-                        CLIENT,
-                        b_data["number"]
-                    )
-                )
-
-                execute(
-                    """
-                    DELETE FROM bons
-                    WHERE id=?
-                    """,
-                    (selected_id,)
-                )
-
-                st.success(
-                    "Bon supprimé et stock réajusté !"
-                )
-
-            if st.button(
-                "🚨 Supprimer ce Bon "
-                "(Restaure le stock)",
-                use_container_width=True
-            ):
-
-                confirm_action_dialog(
-                    "Êtes-vous sûr de vouloir "
-                    "SUPPRIMER ce Bon ? "
-                    "Cette action réajustera le stock.",
-                    delete_current_bon
-                )
+            if st.button("🚨 Supprimer ce Bon (Restaure le stock)", use_container_width=True):
+                confirm_action_dialog("Êtes-vous sûr de vouloir SUPPRIMER ce Bon ? Cette action réajustera le stock.", delete_current_bon)
 
     st.markdown("---")
+    st.subheader("Historique Détaillé des Mouvements")
 
-    st.subheader(
-        "Historique Détaillé des Mouvements"
-    )
-
-    f_fourn = st.selectbox(
-        "Filtrer par Fournisseur",
-        ["Tous"] + active_names(
-            "fournisseurs"
-        )
-    )
-
-    f_eq = st.selectbox(
-        "Filtrer par Équipe",
-        ["Tous"] + active_names(
-            "equipes"
-        )
-    )
+    f_fourn = st.selectbox("Filtrer par Fournisseur", ["Tous"] + active_names("fournisseurs"))
+    f_eq = st.selectbox("Filtrer par Équipe", ["Tous"] + active_names("equipes"))
 
     sql_m = """
-        SELECT
-
-            m.created_at AS Date,
-
-            m.movement_type AS Type,
-
-            m.reference_bon AS Bon,
-
-            a.name AS Article,
-
-            m.quantity AS Qte,
-
-            COALESCE(
-                m.fournisseur,
-                '-'
-            ) AS Fournisseur,
-
-            COALESCE(
-                m.equipe,
-                '-'
-            ) AS Equipe,
-
-            m.username AS Operateur
-
-        FROM movements m
-
-        JOIN articles a
-            ON a.id = m.article_id
-
+        SELECT 
+            m.created_at AS Date, 
+            m.movement_type AS Type, 
+            m.reference_bon AS Bon, 
+            a.name AS Article, 
+            m.quantity AS Qte, 
+            COALESCE(m.fournisseur, '-') AS Fournisseur, 
+            COALESCE(m.equipe, '-') AS Equipe, 
+            m.username AS Operateur 
+        FROM movements m 
+        JOIN articles a ON a.id = m.article_id 
         WHERE m.client = ?
     """
-
     params = [CLIENT]
 
     if f_fourn != "Tous":
-
-        sql_m += """
-            AND m.fournisseur = ?
-        """
-
-        params.append(
-            f_fourn
-        )
-
+        sql_m += " AND m.fournisseur = ?"
+        params.append(f_fourn)
     if f_eq != "Tous":
+        sql_m += " AND m.equipe = ?"
+        params.append(f_eq)
 
-        sql_m += """
-            AND m.equipe = ?
-        """
-
-        params.append(
-            f_eq
-        )
-
-    sql_m += """
-        ORDER BY m.id DESC
-    """
-
-    movs = query(
-        sql_m,
-        tuple(params)
-    )
-
+    sql_m += " ORDER BY m.id DESC"
+    movs = query(sql_m, tuple(params))
+    
     if movs:
-
-        st.dataframe(
-            pd.DataFrame(
-                [dict(m) for m in movs]
-            ),
-            use_container_width=True,
-            hide_index=True
-        )
-
+        st.dataframe(pd.DataFrame([dict(m) for m in movs]), use_container_width=True, hide_index=True)
     else:
+        st.info("Aucun mouvement trouvé.")
 
-        st.info(
-            "Aucun mouvement trouvé."
-        )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown(
-        "</div>",
-        unsafe_allow_html=True
-    )
-
-
-# =========================================================
-# CONFIGURATION
-# =========================================================
-
+# ---------------------------------------------------------
+# ⚙️ RUBRIQUE 5: CONFIGURATION (ADMIN SEULEMENT)
+# ---------------------------------------------------------
 with tabs[4]:
-
     if can(ROLE, "config"):
-
-        st.markdown(
-            '<div class="glass-card">',
-            unsafe_allow_html=True
-        )
-
-        st.subheader(
-            "Configuration Système (Accès Admin)"
-        )
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.subheader("Configuration Système (Accès Admin)")
 
         col_a, col_b, col_c = st.columns(3)
 
-        # -------------------------------------------------
-        # ARTICLES
-        # -------------------------------------------------
-
         with col_a:
-
-            st.markdown(
-                "##### Gérer les Articles"
-            )
-
-            with st.form(
-                "add_art_form"
-            ):
-
-                new_art = st.text_input(
-                    "Nom de l'Article"
-                )
-
-                init_qty = st.number_input(
-                    "Stock Initial",
-                    min_value=0,
-                    value=0
-                )
-
-                if st.form_submit_button(
-                    "Ajouter Article"
-                ):
-
+            st.markdown("##### Gérer les Articles")
+            with st.form("add_art_form"):
+                new_art = st.text_input("Nom de l'Article")
+                init_qty = st.number_input("Stock Initial", min_value=0, value=0)
+                if st.form_submit_button("Ajouter Article"):
                     if new_art:
-
-                        try:
-
-                            art_id = execute(
-                                """
-                                INSERT INTO articles(name)
-                                VALUES (?)
-                                """,
-                                (new_art,)
-                            )
-
-                            if init_qty > 0:
-
-                                set_stock(
-                                    CLIENT,
-                                    art_id,
-                                    init_qty
-                                )
-
-                                add_movement(
-                                    CLIENT,
-                                    art_id,
-                                    "AJUST_POS",
-                                    init_qty,
-                                    "INIT",
-                                    CURRENT_USER["username"],
-                                    "Stock Initial"
-                                )
-
-                            st.success(
-                                "Article ajouté !"
-                            )
-
-                            st.rerun()
-
-                        except sqlite3.IntegrityError:
-
-                            st.error(
-                                "Cet article existe déjà."
-                            )
-
-        # -------------------------------------------------
-        # FOURNISSEURS
-        # -------------------------------------------------
+                        art_id = execute("INSERT INTO articles (name) VALUES (?)", (new_art,))
+                        if init_qty > 0:
+                            set_stock(CLIENT, art_id, init_qty)
+                            add_movement(CLIENT, art_id, "AJUST_POS", init_qty, "INIT", CURRENT_USER["username"], "Stock Initial")
+                        st.success("Article ajouté !")
+                        st.rerun()
 
         with col_b:
-
-            st.markdown(
-                "##### Gérer les Fournisseurs"
-            )
-
-            with st.form(
-                "add_fourn_form"
-            ):
-
-                new_f = st.text_input(
-                    "Nom du Fournisseur"
-                )
-
-                if st.form_submit_button(
-                    "Ajouter Fournisseur"
-                ):
-
+            st.markdown("##### Gérer les Fournisseurs")
+            with st.form("add_fourn_form"):
+                new_f = st.text_input("Nom du Fournisseur")
+                if st.form_submit_button("Ajouter Fournisseur"):
                     if new_f:
-
-                        try:
-
-                            execute(
-                                """
-                                INSERT INTO fournisseurs(name)
-                                VALUES (?)
-                                """,
-                                (new_f,)
-                            )
-
-                            st.success(
-                                "Fournisseur ajouté !"
-                            )
-
-                            st.rerun()
-
-                        except sqlite3.IntegrityError:
-
-                            st.error(
-                                "Ce fournisseur existe déjà."
-                            )
-
-        # -------------------------------------------------
-        # EQUIPES
-        # -------------------------------------------------
+                        execute("INSERT INTO fournisseurs (name) VALUES (?)", (new_f,))
+                        st.success("Fournisseur ajouté !")
+                        st.rerun()
 
         with col_c:
-
-            st.markdown(
-                "##### Gérer les Équipes"
-            )
-
-            with st.form(
-                "add_eq_form"
-            ):
-
-                new_e = st.text_input(
-                    "Nom de l'Équipe"
-                )
-
-                if st.form_submit_button(
-                    "Ajouter Équipe"
-                ):
-
+            st.markdown("##### Gérer les Équipes")
+            with st.form("add_eq_form"):
+                new_e = st.text_input("Nom de l'Équipe")
+                if st.form_submit_button("Ajouter Équipe"):
                     if new_e:
-
-                        try:
-
-                            execute(
-                                """
-                                INSERT INTO equipes(name)
-                                VALUES (?)
-                                """,
-                                (new_e,)
-                            )
-
-                            st.success(
-                                "Équipe ajoutée !"
-                            )
-
-                            st.rerun()
-
-                        except sqlite3.IntegrityError:
-
-                            st.error(
-                                "Cette équipe existe déjà."
-                            )
+                        execute("INSERT INTO equipes (name) VALUES (?)", (new_e,))
+                        st.success("Équipe ajoutée !")
+                        st.rerun()
 
         st.markdown("---")
-
-        # -------------------------------------------------
-        # AJUSTEMENT STOCK
-        # -------------------------------------------------
-
-        st.subheader(
-            "🛠️ Ajustement Manuel du Stock"
-        )
-
-        with st.form(
-            "manual_adjust_form"
-        ):
-
-            adj_art = st.selectbox(
-                "Article à ajuster",
-                active_names("articles")
-            )
-
-            adj_qty = st.number_input(
-                "Nouvelle Quantité exacte en Stock",
-                min_value=0,
-                value=0
-            )
-
-            if st.form_submit_button(
-                "Appliquer l'ajustement"
-            ):
+        st.subheader("🛠️ Ajustement Manuel du Stock")
+        with st.form("manual_adjust_form"):
+            adj_art = st.selectbox("Article à ajuster", active_names("articles"))
+            adj_qty = st.number_input("Nouvelle Quantité exacte en Stock", min_value=0, value=0)
+            if st.form_submit_button("Appliquer l'ajustement"):
 
                 def do_adjust():
+                    a_id = article_id_by_name(adj_art)
+                    old_qty = current_stock(CLIENT, a_id)
+                    diff = adj_qty - old_qty
+                    set_stock(CLIENT, a_id, adj_qty)
+                    m_type = "AJUST_POS" if diff >= 0 else "AJUST_NEG"
+                    add_movement(CLIENT, a_id, m_type, abs(diff), "MANUAL", CURRENT_USER["username"], "Ajustement Manuel Admin")
+                    st.success("Stock ajusté !")
 
-                    a_id = article_id_by_name(
-                        adj_art
-                    )
+                confirm_action_dialog(f"Ajuster manuellement le stock de {adj_art} à {adj_qty} unités ?", do_adjust)
 
-                    old_qty = current_stock(
-                        CLIENT,
-                        a_id
-                    )
-
-                    diff = (
-                        adj_qty
-                        - old_qty
-                    )
-
-                    set_stock(
-                        CLIENT,
-                        a_id,
-                        adj_qty
-                    )
-
-                    m_type = (
-                        "AJUST_POS"
-                        if diff >= 0
-                        else "AJUST_NEG"
-                    )
-
-                    add_movement(
-                        CLIENT,
-                        a_id,
-                        m_type,
-                        abs(diff),
-                        "MANUAL",
-                        CURRENT_USER["username"],
-                        "Ajustement Manuel Admin"
-                    )
-
-                    st.success(
-                        "Stock ajusté !"
-                    )
-
-                confirm_action_dialog(
-                    f"Ajuster manuellement le stock "
-                    f"de {adj_art} à {adj_qty} unités ?",
-                    do_adjust
-                )
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
-
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
-
-        st.error(
-            "Accès réservé exclusivement aux Administrateurs."
-        )
+        st.error("Accès réservé exclusivement aux Administrateurs.")
